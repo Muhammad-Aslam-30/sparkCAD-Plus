@@ -53,7 +53,13 @@ class Transformation:
         if self.from_rdd == other.from_rdd:
             self.to_rdd < other.to_rdd
         return self.from_rdd < other.from_rdd
-
+    
+class TransformationWithoutI:
+    
+    def __init__(self, from_rdd, to_rdd, is_narrow):
+        self.from_rdd = from_rdd
+        self.to_rdd = to_rdd
+        self.is_narrow = is_narrow
     
 class CachingPlanItem:
     
@@ -108,6 +114,9 @@ class FactHub():
     rdd_id_stage_with_max_tasks = {}
     submitted_stages = set()
     rdds_lst = []
+    rdds_lst_refactored = []
+    rdds_lst_InstrumentedRdds = []
+    tranformation_without_i = []
     root_rdd_max_input_size = {}
     task_in_which_stage = {}
     taskid_launchtime = {}
@@ -468,10 +477,15 @@ class SparkDataflowVisualizer():
         Analyzer.prepare_transformations_lst()
         Analyzer.analyze_caching_anomalies()
 
-    #def rdds_lst_refactor():
-        #for rdd in FactHub.rdds_lst:
-            #if rdd.id == 2:
-                #del FactHub.rdds_lst[rdd]
+    def rdds_lst_refactor():
+        for i, rdd in enumerate(FactHub.rdds_lst):
+            if ("InstrumentedRDD" not in rdd.name):
+                FactHub.rdds_lst_refactored.append(rdd)
+            else:
+                FactHub.rdds_lst_InstrumentedRdds.append(rdd.id)
+        print("-=-=-=-=-=-=-=-=-==-=-=-=-=-==-=-=-")
+        #for rdd in FactHub.rdds_lst_refactored:
+            #print (rdd.id, rdd.name)
         #for i, j in enumerate(FactHub.rdds_lst):
             #if j.id == 1 and j.job_id == 0:
                 #del FactHub.rdds_lst[i]
@@ -496,8 +510,8 @@ class SparkDataflowVisualizer():
                 iterations_count-=1
             else:
                 iterations_count = int(config['Drawing']['max_iterations_count']) 
-            for rdd in FactHub.rdds_lst:
-                if rdd.job_id == job_id and rdd.id not in dag_rdds_set and rdd.id != 1:
+            for rdd in FactHub.rdds_lst_refactored:
+                if rdd.job_id == job_id and rdd.id not in dag_rdds_set:
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
                     if config['Drawing']['show_action_id'] == "true":
@@ -532,18 +546,37 @@ class SparkDataflowVisualizer():
                 action_lable = "[" + str(job_id) + "]"
             if config['Drawing']['show_action_name'] == "true":
                 action_lable = action_lable + action_name[:int(config['Drawing']['action_name_max_number_of_chars'])]
-            
             if draw_iteration_indicator == True:    
                 draw_iteration_indicator = False
                 continue
             dot.node("Action_" + str(job_id), shape=config['Drawing']['action_shape'] if iterations_count != 0 else config['Drawing']['iterative_action_shape'], fillcolor = config['Drawing']['action_bg_collor'] if iterations_count != 0 else config['Drawing']['iterative_action_collor'], style = 'filled', label = action_lable)
             dot.edge(str(job[0]), "Action_" + str(job_id), color = 'black', arrowhead = 'none', style = 'dashed')
-            prev_action_name = action_name 
+            prev_action_name = action_name
+        print(dag_rdds_set)
+        
+        #to create FactHub.tranformation_without_i to contain rdd ids without instrumentation ids but will have duplicates
         for transformation in sorted(AnalysisHub.transformations_set):
+            if transformation.to_rdd not in FactHub.rdds_lst_InstrumentedRdds and transformation.from_rdd not in FactHub.rdds_lst_InstrumentedRdds:
+                FactHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
+            if transformation.from_rdd in FactHub.rdds_lst_InstrumentedRdds:
+                FactHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd - 1, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
+            if transformation.to_rdd in FactHub.rdds_lst_InstrumentedRdds:
+                FactHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd - 1, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
+        #to refactor FactHub.tranformation_without_i to remove duplicates
+        temp_lst_for_tranformation_without_i = []
+        for transformation in FactHub.tranformation_without_i:
+            if(transformation.to_rdd != transformation.from_rdd):
+                temp_lst_for_tranformation_without_i.append(transformation)
+        FactHub.tranformation_without_i.clear()
+        for transformation in temp_lst_for_tranformation_without_i:
+            FactHub.tranformation_without_i.append(transformation)
+        for transformation in FactHub.tranformation_without_i:
+            print(transformation.to_rdd, transformation.from_rdd)
+        
+        for transformation in FactHub.tranformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
-                print(transformation.to_rdd, transformation.from_rdd)
                 dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), color = config['Drawing']['narrow_transformation_color'] if transformation.is_narrow else config['Drawing']['wide_transformation_color'])
-        for transformation in sorted(AnalysisHub.transformations_set):
+        for transformation in FactHub.tranformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
                 if transformation.from_rdd in FactHub.operator_timestamp:
                     time = FactHub.operator_timestamp[transformation.from_rdd]
@@ -553,6 +586,7 @@ class SparkDataflowVisualizer():
                         time = time / 1000
                         rounded_time = round(time,1)
                         dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " s")
+
         caching_plan_label = "\nRecommended Schedule:\n"
         for caching_plan_item in sorted(AnalysisHub.caching_plan_lst):
             if caching_plan_item.is_cache_item:
@@ -586,15 +620,13 @@ class SparkDataflowVisualizer():
 
 def load_file(file_name):
     spark_dataflow_visualizer_input_path = Utility.get_absolute_path(config['Paths']['input_path'])
-#    print(spark_dataflow_visualizer_input_path)
     log_file_path = spark_dataflow_visualizer_input_path + '/' + file_name
-#    print(log_file_path)
     SparkDataflowVisualizer.init()
     SparkDataflowVisualizer.parse(log_file_path)
 
 def draw_DAG():
     SparkDataflowVisualizer.analyze()
-    #SparkDataflowVisualizer.rdds_lst_refactor()
+    SparkDataflowVisualizer.rdds_lst_refactor()
     SparkDataflowVisualizer.visualize_property_DAG()
     
 def cache(rdd_id):
