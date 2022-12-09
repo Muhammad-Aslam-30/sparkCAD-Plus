@@ -116,6 +116,8 @@ class FactHub():
     rdds_lst = []
     rdds_lst_refactored = []
     rdds_lst_InstrumentedRdds = []
+    rdds_lst_renumbered = []
+    rdds_lst_index_dict = {}
     tranformation_without_i = []
     root_rdd_max_input_size = {}
     task_in_which_stage = {}
@@ -484,8 +486,24 @@ class SparkDataflowVisualizer():
             else:
                 FactHub.rdds_lst_InstrumentedRdds.append(rdd.id)
         print("-=-=-=-=-=-=-=-=-==-=-=-=-=-==-=-=-")
-        #for rdd in FactHub.rdds_lst_refactored:
-            #print (rdd.id, rdd.name)
+        
+        temp = []
+        for rdd in FactHub.rdds_lst_refactored:
+            #print(rdd.id, rdd.name)
+            temp.append(rdd.id)
+        temp = list(dict.fromkeys(sorted(temp)))
+        temp1 = []
+        temp1 = [temp.index(x) for x in temp]
+        for x in temp:
+            FactHub.rdds_lst_index_dict[x] = temp.index(x)
+        print(FactHub.rdds_lst_index_dict)
+        for rdd in FactHub.rdds_lst_refactored:
+            FactHub.rdds_lst_renumbered.append(Rdd(FactHub.rdds_lst_index_dict[rdd.id],rdd.name, rdd.parents_lst, rdd.stage_id, rdd.job_id, rdd.is_cached))
+        #for r in FactHub.rdds_lst_renumbered:
+            #print(r.id, r.name, r.parents_lst, r.stage_id, r.job_id, r.is_cached)
+
+        #for rdd in sorted(temp):
+            #print(rdd)
         #for i, j in enumerate(FactHub.rdds_lst):
             #if j.id == 1 and j.job_id == 0:
                 #del FactHub.rdds_lst[i]
@@ -515,7 +533,8 @@ class SparkDataflowVisualizer():
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
                     if config['Drawing']['show_action_id'] == "true":
-                        node_label = "[" + str(rdd.id) + "] " 
+                        renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
+                        node_label = "[" + str(renumbered_rdd_id) + "] " 
                     if config['Drawing']['show_rdd_name'] == "true":
                         node_label = node_label + rdd.name[:int(config['Drawing']['rdd_name_max_number_of_chars'])]
                     if config['Drawing']['show_rdd_size'] == "true":
@@ -552,7 +571,12 @@ class SparkDataflowVisualizer():
             dot.node("Action_" + str(job_id), shape=config['Drawing']['action_shape'] if iterations_count != 0 else config['Drawing']['iterative_action_shape'], fillcolor = config['Drawing']['action_bg_collor'] if iterations_count != 0 else config['Drawing']['iterative_action_collor'], style = 'filled', label = action_lable)
             dot.edge(str(job[0]), "Action_" + str(job_id), color = 'black', arrowhead = 'none', style = 'dashed')
             prev_action_name = action_name
+        print("dag rdds set")
         print(dag_rdds_set)
+        print("dag rdds set")
+        print("FactHub.rddID_partition")
+        print(FactHub.rddID_partition)
+        print("FactHub.rddID_partition")
         
         #to create FactHub.tranformation_without_i to contain rdd ids without instrumentation ids but will have duplicates
         for transformation in sorted(AnalysisHub.transformations_set):
@@ -571,7 +595,7 @@ class SparkDataflowVisualizer():
         for transformation in temp_lst_for_tranformation_without_i:
             FactHub.tranformation_without_i.append(transformation)
         for transformation in FactHub.tranformation_without_i:
-            print(transformation.to_rdd, transformation.from_rdd)
+            print(transformation.to_rdd, transformation.from_rdd, transformation.is_narrow)
         
         for transformation in FactHub.tranformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
@@ -580,6 +604,7 @@ class SparkDataflowVisualizer():
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
                 if transformation.from_rdd in FactHub.operator_timestamp:
                     time = FactHub.operator_timestamp[transformation.from_rdd]
+                    print(transformation.from_rdd, time)
                     if time < 1000:
                         dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(time) + " ms")
                     else:
