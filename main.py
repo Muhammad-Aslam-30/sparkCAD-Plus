@@ -97,33 +97,25 @@ class FactHub():
     stage_info_dect = {}
     stage_job_dect = {}
     stage_name_dect = {}
-    stage_task_dect = {}
-    stage_operator_dect = defaultdict(list)
-    stage_operator = defaultdict(list)
-    #total = accumulables_update + bytes_written
-    stage_total = {}
-    operator_partition = {}
-    rddID_partition = {}
-    rddID_stage = defaultdict(list)
-    stage_operator_partition = {}
+    stage_no_of_tasks = {}
+    stage_i_operator_dect = defaultdict(list)
+    stage_i_operators_id = defaultdict(list)
     submitted_stage_last_rdd_dect = {}
-    job_last_rdd_dect = {}
-    job_last_rdd = {}
-    last_rdd_size = {}
-    job_last_stage = {}
-    rdd_id_stage_with_max_tasks = {}
     submitted_stages = set()
     rdds_lst = []
-    rdds_lst_refactored = []
-    rdds_lst_InstrumentedRdds = []
-    rdds_lst_renumbered = []
-    rdds_lst_index_dict = {}
-    tranformation_without_i = []
-    root_rdd_max_input_size = {}
+    operator_partition_size = {}
+    rddID_in_stage = defaultdict(list)
+    stage_operator_partition = {}
+    #total = accumulables_update + bytes_written
+    stage_total = {}
+    job_last_rdd = {}
+    job_last_rdd_dect = {}
+    job_last_stage = {}
+    rdd_id_stage_with_max_tasks = {}
     task_in_which_stage = {}
+    rdds_lst_index_dict = {}
     taskid_launchtime = {}
     taskid_finishtime = {}
-    operator_timestamp = {}
     taskid_operator_dect = defaultdict(list)
 
     def flush():
@@ -164,6 +156,27 @@ class AnalysisHub():
         AnalysisHub.stage_used_rdds = {}
         AnalysisHub.computed_rdds.clear()
         AnalysisHub.rdd_usage_lifetime_dict = {}
+        
+class SizeAndTimeHub():
+
+    root_rdd_size = {}
+    rddID_size = {}
+    last_rdd_size = {}
+    operator_timestamp = {}
+    rdds_lst_refactored = []
+    rdds_lst_InstrumentedRdds = []
+    rdds_lst_renumbered = []
+    tranformation_without_i = []
+    
+    def flush():
+        SizeAndTimeHub.root_rdd_size = {}
+        SizeAndTimeHub.rddID_size = {}
+        SizeAndTimeHub.last_rdd_size = {}
+        SizeAndTimeHub.operator_timestamp = {}
+        SizeAndTimeHub.rdds_lst_refactored = []
+        SizeAndTimeHub.rdds_lst_InstrumentedRdds = []
+        SizeAndTimeHub.rdds_lst_renumbered = []
+        SizeAndTimeHub.tranformation_without_i = []
 
         
 class Parser():    
@@ -195,31 +208,32 @@ class Parser():
                 if (i == 0):
                     #print("first entry")
                     first_operator_time = FactHub.taskid_operator_dect[task_id][i]['Timestamp'] - FactHub.taskid_launchtime[task_id]
-                    if FactHub.taskid_operator_dect[task_id][i]['Operator ID'] in FactHub.operator_timestamp.keys():
-                        FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] + first_operator_time
+                    if FactHub.taskid_operator_dect[task_id][i]['Operator ID'] in SizeAndTimeHub.operator_timestamp.keys():
+                        SizeAndTimeHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = SizeAndTimeHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] + first_operator_time
                     else:
-                        FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = first_operator_time
+                        SizeAndTimeHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = first_operator_time
                 #elif (i == total_entries-1):
                     #print("last entry")
                     #last_operator_time = FactHub.taskid_finishtime[task_id] - FactHub.taskid_operator_dect[task_id][i]['Timestamp']
-                    #if FactHub.taskid_operator_dect[task_id][i]['Operator ID'] in FactHub.operator_timestamp.keys():
-                        #FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] + first_operator_time
+                    #if FactHub.taskid_operator_dect[task_id][i]['Operator ID'] in SizeAndTimeHub.operator_timestamp.keys():
+                        #SizeAndTimeHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = SizeAndTimeHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] + first_operator_time
                     #else:
-                        #FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = last_operator_time
+                        #SizeAndTimeHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = last_operator_time
                 else:
                     #print("other entries")
                     middle_operator_time = FactHub.taskid_operator_dect[task_id][i]['Timestamp'] - FactHub.taskid_operator_dect[task_id][i-1]['Timestamp']
-                    if FactHub.taskid_operator_dect[task_id][i]['Operator ID'] in FactHub.operator_timestamp.keys():
-                        FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] + first_operator_time
+                    if FactHub.taskid_operator_dect[task_id][i]['Operator ID'] in SizeAndTimeHub.operator_timestamp.keys():
+                        SizeAndTimeHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = SizeAndTimeHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] + first_operator_time
                     else:
-                        FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = middle_operator_time
+                        SizeAndTimeHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = middle_operator_time
                 #To calculated timestamp of last rdd of a job (logic = used timestamp of an operator before the last rdd and task's finish time)
                 if (i == total_entries-1):
                     last_operator_time = FactHub.taskid_finishtime[task_id] - FactHub.taskid_operator_dect[task_id][i]['Timestamp']
-                    if rdd in FactHub.operator_timestamp.keys():
-                        FactHub.operator_timestamp[rdd] = FactHub.operator_timestamp[rdd] + first_operator_time
+                    if rdd in SizeAndTimeHub.operator_timestamp.keys():
+                        SizeAndTimeHub.operator_timestamp[rdd] = SizeAndTimeHub.operator_timestamp[rdd] + first_operator_time
                     else:
-                        FactHub.operator_timestamp[rdd] = last_operator_time
+                        SizeAndTimeHub.operator_timestamp[rdd] = last_operator_time
+        print(SizeAndTimeHub.operator_timestamp)
         
     def prepare_leaf_from_task_end_events(task_end_events):
         stage_id_for_a_task = task_end_events['Stage ID'].tolist()
@@ -244,20 +258,21 @@ class Parser():
             total = accumulables_update + bytes_written
             #print(total)
             queue.append(total)
-        #print(FactHub.stage_task_dect)
-        for i in FactHub.stage_task_dect:
+        for i in FactHub.stage_no_of_tasks:
             total = 0
-            for x in range(0, FactHub.stage_task_dect[i]):
+            for x in range(0, FactHub.stage_no_of_tasks[i]):
                 total = total + queue[0]
                 queue.pop(0)
             FactHub.stage_total[i] = total
         #print("++++++++++")
-        #print(FactHub.stage_total)
+        print(FactHub.stage_total)
         for job_id in FactHub.job_last_stage:
             last_stage = FactHub.job_last_stage[job_id]
             if last_stage in FactHub.stage_total.keys():
                 total = FactHub.stage_total[last_stage]
-                FactHub.last_rdd_size[FactHub.job_last_rdd[job_id]] = total
+                SizeAndTimeHub.last_rdd_size[FactHub.job_last_rdd[job_id]] = total
+        print(FactHub.job_last_rdd)
+        print(SizeAndTimeHub.last_rdd_size)
     
     def prepare_root_from_stage_completed_events(stage_submitted_events):
         max_size_root_rdd = 0
@@ -271,35 +286,34 @@ class Parser():
                 if read_bytes['Name'] == 'internal.metrics.input.bytesRead' and read_bytes['Value'] > max_size_root_rdd:
                     max_size_root_rdd = read_bytes['Value']
                     root_rdd = rdd_info['RDD ID']
-        FactHub.root_rdd_max_input_size[root_rdd] = max_size_root_rdd
-                                        
+        SizeAndTimeHub.root_rdd_size[root_rdd] = max_size_root_rdd
+        print(SizeAndTimeHub.root_rdd_size)
     
     def prepare_RDD_ID_from_stage_submitted_events(stage_submitted_events):
         for i, submitted_stage in enumerate(stage_submitted_events['Stage Info'].tolist()):
             stage_id = submitted_stage['Stage ID']
             for j, rdd_info in enumerate(submitted_stage['RDD Info']):
                 rdd_id = rdd_info['RDD ID']
-                FactHub.rddID_stage[rdd_id].append(stage_id)
-        # To order the FactHub.rddID_stage in ascending order based on key
-        dict1 = OrderedDict(sorted(FactHub.rddID_stage.items()))
+                FactHub.rddID_in_stage[rdd_id].append(stage_id)
+        # To order the FactHub.rddID_in_stage in ascending order based on key
+        dict1 = OrderedDict(sorted(FactHub.rddID_in_stage.items()))
         for i in dict1:
             max_no_of_tasks = 0
             for j in dict1[i]:
-                if FactHub.stage_task_dect[j] > max_no_of_tasks:
-                    max_no_of_tasks = FactHub.stage_task_dect[j]
+                if FactHub.stage_no_of_tasks[j] > max_no_of_tasks:
+                    max_no_of_tasks = FactHub.stage_no_of_tasks[j]
                     respective_stage = j
             FactHub.rdd_id_stage_with_max_tasks[i] = respective_stage
-        for operator in FactHub.operator_partition:
+        for operator in FactHub.operator_partition_size:
             if operator in FactHub.rdd_id_stage_with_max_tasks.keys():
                 stage_with_max_tasks = FactHub.rdd_id_stage_with_max_tasks[operator]
-            for stage in FactHub.stage_operator:
-                if operator in FactHub.stage_operator[stage]:
+            for stage in FactHub.stage_i_operators_id:
+                if operator in FactHub.stage_i_operators_id[stage]:
                     operator_s_stage = stage
             if operator_s_stage == stage_with_max_tasks:
-                FactHub.rddID_partition[operator] = FactHub.operator_partition[operator]
+                SizeAndTimeHub.rddID_size[operator] = FactHub.operator_partition_size[operator]
             else:
-                FactHub.rddID_partition[operator] = FactHub.operator_partition[operator] * (stage_with_max_tasks / FactHub.stage_task_dect)   
-            
+                SizeAndTimeHub.rddID_size[operator] = FactHub.operator_partition_size[operator] * (stage_with_max_tasks / FactHub.stage_no_of_tasks)   
             
     def prepare_from_job_start_events(job_start_events):
         job_ids_list = job_start_events['Job ID'].tolist()
@@ -314,7 +328,7 @@ class Parser():
                 FactHub.stage_info_dect[stage_id] = stage_rec
                 FactHub.stage_name_dect[stage_id] = stage_rec['Stage Name']
                 # To print the number of tasks in each stage
-                FactHub.stage_task_dect[stage_id] = stage_rec['Number of Tasks']
+                FactHub.stage_no_of_tasks[stage_id] = stage_rec['Number of Tasks']
                 id_of_last_rdd_in_stage = -1
                 for stage_rdd_num, stage_rdd_rec in enumerate(stage_rec['RDD Info']):
                     rdd_id = stage_rdd_rec['RDD ID']
@@ -345,28 +359,28 @@ class Parser():
         task_operators_info_list = task_end_events['SparkIOperatorsDetails'].tolist()
         for index, task_operator_rec in enumerate(task_operators_info_list):
             task_stage_id = int(task_stage_ids_list[index])
-            FactHub.stage_operator_dect[task_stage_id].append(task_operator_rec)  
+            FactHub.stage_i_operator_dect[task_stage_id].append(task_operator_rec)  
         a = []
         operator_ids_list = []
         count = 0
-        for task_stage_i in FactHub.stage_operator_dect.keys():
-            length = len(FactHub.stage_operator_dect[task_stage_i])
+        for task_stage_i in FactHub.stage_i_operator_dect.keys():
+            length = len(FactHub.stage_i_operator_dect[task_stage_i])
             for lent in range(length):
                 # To Print lists of operators details
-                a = FactHub.stage_operator_dect[task_stage_i][lent]
+                a = FactHub.stage_i_operator_dect[task_stage_i][lent]
                 FactHub.taskid_operator_dect[count] = a
                 count = count + 1
                 for a_seperate_list in a:
-                    if a_seperate_list['Operator ID'] in FactHub.operator_partition.keys():
-                        temp_dict_value = FactHub.operator_partition[a_seperate_list['Operator ID']]
-                        FactHub.operator_partition.update({a_seperate_list['Operator ID'] : (a_seperate_list['Partition Size'] + temp_dict_value)})
+                    if a_seperate_list['Operator ID'] in FactHub.operator_partition_size.keys():
+                        temp_dict_value = FactHub.operator_partition_size[a_seperate_list['Operator ID']]
+                        FactHub.operator_partition_size.update({a_seperate_list['Operator ID'] : (a_seperate_list['Partition Size'] + temp_dict_value)})
                     else:
-                        FactHub.operator_partition[a_seperate_list['Operator ID']] = a_seperate_list['Partition Size']
-                        FactHub.stage_operator[task_stage_i].append(a_seperate_list['Operator ID'])
-                FactHub.stage_operator_partition[task_stage_i] = FactHub.operator_partition
-        #for stage_id in FactHub.stage_operator.keys():
-            #for operator_id in FactHub.stage_operator[stage_id]:
-                #print(stage_id, operator_id, FactHub.operator_partition[operator_id])
+                        FactHub.operator_partition_size[a_seperate_list['Operator ID']] = a_seperate_list['Partition Size']
+                        FactHub.stage_i_operators_id[task_stage_i].append(a_seperate_list['Operator ID'])
+                FactHub.stage_operator_partition[task_stage_i] = FactHub.operator_partition_size
+        #for stage_id in FactHub.stage_i_operators_id.keys():
+            #for operator_id in FactHub.stage_i_operators_id[stage_id]:
+                #print(stage_id, operator_id, FactHub.operator_partition_size[operator_id])
         
     def prepare_from_stage_submitted_events(stage_submitted_events):
         for index, submitted_stage in enumerate(stage_submitted_events['Stage Info'].tolist()):
@@ -482,13 +496,11 @@ class SparkDataflowVisualizer():
     def rdds_lst_refactor():
         for i, rdd in enumerate(FactHub.rdds_lst):
             if ("InstrumentedRDD" not in rdd.name):
-                FactHub.rdds_lst_refactored.append(rdd)
+                SizeAndTimeHub.rdds_lst_refactored.append(rdd)
             else:
-                FactHub.rdds_lst_InstrumentedRdds.append(rdd.id)
-        print("-=-=-=-=-=-=-=-=-==-=-=-=-=-==-=-=-")
-        
+                SizeAndTimeHub.rdds_lst_InstrumentedRdds.append(rdd.id)
         temp = []
-        for rdd in FactHub.rdds_lst_refactored:
+        for rdd in SizeAndTimeHub.rdds_lst_refactored:
             #print(rdd.id, rdd.name)
             temp.append(rdd.id)
         temp = list(dict.fromkeys(sorted(temp)))
@@ -497,9 +509,9 @@ class SparkDataflowVisualizer():
         for x in temp:
             FactHub.rdds_lst_index_dict[x] = temp.index(x)
         print(FactHub.rdds_lst_index_dict)
-        for rdd in FactHub.rdds_lst_refactored:
-            FactHub.rdds_lst_renumbered.append(Rdd(FactHub.rdds_lst_index_dict[rdd.id],rdd.name, rdd.parents_lst, rdd.stage_id, rdd.job_id, rdd.is_cached))
-        #for r in FactHub.rdds_lst_renumbered:
+        for rdd in SizeAndTimeHub.rdds_lst_refactored:
+            SizeAndTimeHub.rdds_lst_renumbered.append(Rdd(FactHub.rdds_lst_index_dict[rdd.id],rdd.name, rdd.parents_lst, rdd.stage_id, rdd.job_id, rdd.is_cached))
+        #for r in SizeAndTimeHub.rdds_lst_renumbered:
             #print(r.id, r.name, r.parents_lst, r.stage_id, r.job_id, r.is_cached)
 
         #for rdd in sorted(temp):
@@ -511,7 +523,7 @@ class SparkDataflowVisualizer():
             #print(rdd.id, rdd.stage_id, rdd.job_id, rdd.name, rdd.parents_lst) 
             #id, name, parents_lst, stage_id, job_id, is_cached
         
-    def visualize_property_DAG():         
+    def visualize_property_DAG():
         dot = graphviz.Digraph(strict=True, comment='Spark-Application-Graph', format = config['Output']['selected_format'])
         dot.attr('node', shape=config['Drawing']['rdd_shape'], label='this is graph')
         dot.node_attr={'shape': 'plaintext'}
@@ -528,7 +540,7 @@ class SparkDataflowVisualizer():
                 iterations_count-=1
             else:
                 iterations_count = int(config['Drawing']['max_iterations_count']) 
-            for rdd in FactHub.rdds_lst_refactored:
+            for rdd in SizeAndTimeHub.rdds_lst_refactored:
                 if rdd.job_id == job_id and rdd.id not in dag_rdds_set:
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
@@ -538,16 +550,16 @@ class SparkDataflowVisualizer():
                     if config['Drawing']['show_rdd_name'] == "true":
                         node_label = node_label + rdd.name[:int(config['Drawing']['rdd_name_max_number_of_chars'])]
                     if config['Drawing']['show_rdd_size'] == "true":
-                        if rdd.id in FactHub.rddID_partition:
-                            size_in_mb = FactHub.rddID_partition[rdd.id] / 1000000
+                        if rdd.id in SizeAndTimeHub.rddID_size:
+                            size_in_mb = SizeAndTimeHub.rddID_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
                             node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
-                        if rdd.id in FactHub.root_rdd_max_input_size:
-                            size_in_mb = FactHub.root_rdd_max_input_size[rdd.id] / 1000000
+                        if rdd.id in SizeAndTimeHub.root_rdd_size:
+                            size_in_mb = SizeAndTimeHub.root_rdd_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
                             node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
-                        if rdd.id in FactHub.last_rdd_size:
-                            size_in_mb = FactHub.last_rdd_size[rdd.id] / 1000000
+                        if rdd.id in SizeAndTimeHub.last_rdd_size:
+                            size_in_mb = SizeAndTimeHub.last_rdd_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
                             node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
                     if config['Caching_Anomalies']['show_number_of_rdd_usage'] == "true":
@@ -571,40 +583,34 @@ class SparkDataflowVisualizer():
             dot.node("Action_" + str(job_id), shape=config['Drawing']['action_shape'] if iterations_count != 0 else config['Drawing']['iterative_action_shape'], fillcolor = config['Drawing']['action_bg_collor'] if iterations_count != 0 else config['Drawing']['iterative_action_collor'], style = 'filled', label = action_lable)
             dot.edge(str(job[0]), "Action_" + str(job_id), color = 'black', arrowhead = 'none', style = 'dashed')
             prev_action_name = action_name
-        print("dag rdds set")
-        print(dag_rdds_set)
-        print("dag rdds set")
-        print("FactHub.rddID_partition")
-        print(FactHub.rddID_partition)
-        print("FactHub.rddID_partition")
         
-        #to create FactHub.tranformation_without_i to contain rdd ids without instrumentation ids but will have duplicates
+        #to create SizeAndTimeHub.tranformation_without_i to contain rdd ids without instrumentation ids but will have duplicates
         for transformation in sorted(AnalysisHub.transformations_set):
-            if transformation.to_rdd not in FactHub.rdds_lst_InstrumentedRdds and transformation.from_rdd not in FactHub.rdds_lst_InstrumentedRdds:
-                FactHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
-            if transformation.from_rdd in FactHub.rdds_lst_InstrumentedRdds:
-                FactHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd - 1, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
-            if transformation.to_rdd in FactHub.rdds_lst_InstrumentedRdds:
-                FactHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd - 1, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
-        #to refactor FactHub.tranformation_without_i to remove duplicates
+            if transformation.to_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds and transformation.from_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds:
+                SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
+            if transformation.from_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds:
+                SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd - 1, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
+            if transformation.to_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds:
+                SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd - 1, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
+        #to refactor SizeAndTimeHub.tranformation_without_i to remove duplicates
         temp_lst_for_tranformation_without_i = []
-        for transformation in FactHub.tranformation_without_i:
+        for transformation in SizeAndTimeHub.tranformation_without_i:
             if(transformation.to_rdd != transformation.from_rdd):
                 temp_lst_for_tranformation_without_i.append(transformation)
-        FactHub.tranformation_without_i.clear()
+        SizeAndTimeHub.tranformation_without_i.clear()
         for transformation in temp_lst_for_tranformation_without_i:
-            FactHub.tranformation_without_i.append(transformation)
-        for transformation in FactHub.tranformation_without_i:
+            SizeAndTimeHub.tranformation_without_i.append(transformation)
+        for transformation in SizeAndTimeHub.tranformation_without_i:
             print(transformation.to_rdd, transformation.from_rdd, transformation.is_narrow)
         
-        for transformation in FactHub.tranformation_without_i:
+        for transformation in SizeAndTimeHub.tranformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
                 dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), color = config['Drawing']['narrow_transformation_color'] if transformation.is_narrow else config['Drawing']['wide_transformation_color'])
-        for transformation in FactHub.tranformation_without_i:
+        for transformation in SizeAndTimeHub.tranformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
-                if transformation.from_rdd in FactHub.operator_timestamp:
-                    time = FactHub.operator_timestamp[transformation.from_rdd]
-                    print(transformation.from_rdd, time)
+                if transformation.from_rdd in SizeAndTimeHub.operator_timestamp:
+                    time = SizeAndTimeHub.operator_timestamp[transformation.from_rdd]
+                    #print(transformation.from_rdd, time)
                     if time < 1000:
                         dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(time) + " ms")
                     else:
