@@ -165,6 +165,7 @@ class SizeAndTimeHub():
     operator_timestamp = {}
     rdds_lst_refactored = []
     rdds_lst_InstrumentedRdds = []
+    rdds_lst_InstrumentedRdds_id = []
     rdds_lst_renumbered = []
     tranformation_without_i = []
     
@@ -175,6 +176,7 @@ class SizeAndTimeHub():
         SizeAndTimeHub.operator_timestamp = {}
         SizeAndTimeHub.rdds_lst_refactored = []
         SizeAndTimeHub.rdds_lst_InstrumentedRdds = []
+        SizeAndTimeHub.rdds_lst_InstrumentedRdds_id = []
         SizeAndTimeHub.rdds_lst_renumbered = []
         SizeAndTimeHub.tranformation_without_i = []
 
@@ -233,7 +235,7 @@ class Parser():
                         SizeAndTimeHub.operator_timestamp[rdd] = SizeAndTimeHub.operator_timestamp[rdd] + first_operator_time
                     else:
                         SizeAndTimeHub.operator_timestamp[rdd] = last_operator_time
-        print(SizeAndTimeHub.operator_timestamp)
+        #print(SizeAndTimeHub.operator_timestamp)
         
     def prepare_leaf_from_task_end_events(task_end_events):
         stage_id_for_a_task = task_end_events['Stage ID'].tolist()
@@ -265,14 +267,14 @@ class Parser():
                 queue.pop(0)
             FactHub.stage_total[i] = total
         #print("++++++++++")
-        print(FactHub.stage_total)
+        #print(FactHub.stage_total)
         for job_id in FactHub.job_last_stage:
             last_stage = FactHub.job_last_stage[job_id]
             if last_stage in FactHub.stage_total.keys():
                 total = FactHub.stage_total[last_stage]
                 SizeAndTimeHub.last_rdd_size[FactHub.job_last_rdd[job_id]] = total
-        print(FactHub.job_last_rdd)
-        print(SizeAndTimeHub.last_rdd_size)
+        #print(FactHub.job_last_rdd)
+        #print(SizeAndTimeHub.last_rdd_size)
     
     def prepare_root_from_stage_completed_events(stage_submitted_events):
         max_size_root_rdd = 0
@@ -287,7 +289,7 @@ class Parser():
                     max_size_root_rdd = read_bytes['Value']
                     root_rdd = rdd_info['RDD ID']
         SizeAndTimeHub.root_rdd_size[root_rdd] = max_size_root_rdd
-        print(SizeAndTimeHub.root_rdd_size)
+        #print(SizeAndTimeHub.root_rdd_size)
     
     def prepare_RDD_ID_from_stage_submitted_events(stage_submitted_events):
         for i, submitted_stage in enumerate(stage_submitted_events['Stage Info'].tolist()):
@@ -456,7 +458,9 @@ class Analyzer():
         for rdd_id, rdd_usage_lifetime in AnalysisHub.rdd_usage_lifetime_dict.items():
             if config['Caching_Anomalies']['include_caching_anomalies_in_caching_plan'] == "true" or rdd_id not in AnalysisHub.anomalies_dict:
                 AnalysisHub.caching_plan_lst.append(CachingPlanItem(rdd_usage_lifetime[0], rdd_usage_lifetime[1], rdd_id, True))
-                AnalysisHub.caching_plan_lst.append(CachingPlanItem(rdd_usage_lifetime[2], rdd_usage_lifetime[3], rdd_id, False))        
+                print(rdd_usage_lifetime[0], rdd_usage_lifetime[1], rdd_id)
+                AnalysisHub.caching_plan_lst.append(CachingPlanItem(rdd_usage_lifetime[2], rdd_usage_lifetime[3], rdd_id, False)) 
+                print(rdd_usage_lifetime[2], rdd_usage_lifetime[3], rdd_id)
         AnalysisHub.memory_footprint_lst = []
         incremental_rdds_set = set()
         for caching_plan_item in sorted(AnalysisHub.caching_plan_lst):
@@ -498,22 +502,39 @@ class SparkDataflowVisualizer():
             if ("InstrumentedRDD" not in rdd.name):
                 SizeAndTimeHub.rdds_lst_refactored.append(rdd)
             else:
-                SizeAndTimeHub.rdds_lst_InstrumentedRdds.append(rdd.id)
+                SizeAndTimeHub.rdds_lst_InstrumentedRdds_id.append(rdd.id)
+                SizeAndTimeHub.rdds_lst_InstrumentedRdds.append(rdd)
+        #temporary list 't' will store all the cached rdds ids
+        t = []
+        for rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds:
+            if rdd.is_cached:
+                t.append(rdd.id)
+        t = list(dict.fromkeys(t))
+        #temporary list 't1' will store the rdds all details with updated cache status
+        t1 = []
+        for rdd in SizeAndTimeHub.rdds_lst_refactored:
+            if rdd.id+1 in t:
+                t1.append(Rdd(rdd.id, rdd.name, rdd.parents_lst, rdd.stage_id, rdd.job_id, True))
+            else:
+                t1.append(rdd)
+        #flushing all the details in the 'SizeAndTimeHub.rdds_lst_refactored' list and dump it again with all the details from 't1'
+        #in order to update the caching staus in the 'SizeAndTimeHub.rdds_lst_refactored' list and to show it in the DAG
+        SizeAndTimeHub.rdds_lst_refactored = []
+        for rdd in t1:
+            SizeAndTimeHub.rdds_lst_refactored.append(rdd)
+            
         temp = []
         for rdd in SizeAndTimeHub.rdds_lst_refactored:
-            #print(rdd.id, rdd.name)
             temp.append(rdd.id)
         temp = list(dict.fromkeys(sorted(temp)))
         temp1 = []
         temp1 = [temp.index(x) for x in temp]
         for x in temp:
             FactHub.rdds_lst_index_dict[x] = temp.index(x)
-        print(FactHub.rdds_lst_index_dict)
         for rdd in SizeAndTimeHub.rdds_lst_refactored:
             SizeAndTimeHub.rdds_lst_renumbered.append(Rdd(FactHub.rdds_lst_index_dict[rdd.id],rdd.name, rdd.parents_lst, rdd.stage_id, rdd.job_id, rdd.is_cached))
         #for r in SizeAndTimeHub.rdds_lst_renumbered:
             #print(r.id, r.name, r.parents_lst, r.stage_id, r.job_id, r.is_cached)
-
         #for rdd in sorted(temp):
             #print(rdd)
         #for i, j in enumerate(FactHub.rdds_lst):
@@ -586,11 +607,11 @@ class SparkDataflowVisualizer():
         
         #to create SizeAndTimeHub.tranformation_without_i to contain rdd ids without instrumentation ids but will have duplicates
         for transformation in sorted(AnalysisHub.transformations_set):
-            if transformation.to_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds and transformation.from_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds:
+            if transformation.to_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id and transformation.from_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id:
                 SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
-            if transformation.from_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds:
+            if transformation.from_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id:
                 SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd - 1, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
-            if transformation.to_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds:
+            if transformation.to_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id:
                 SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd - 1, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
         #to refactor SizeAndTimeHub.tranformation_without_i to remove duplicates
         temp_lst_for_tranformation_without_i = []
@@ -600,8 +621,8 @@ class SparkDataflowVisualizer():
         SizeAndTimeHub.tranformation_without_i.clear()
         for transformation in temp_lst_for_tranformation_without_i:
             SizeAndTimeHub.tranformation_without_i.append(transformation)
-        for transformation in SizeAndTimeHub.tranformation_without_i:
-            print(transformation.to_rdd, transformation.from_rdd, transformation.is_narrow)
+        #for transformation in SizeAndTimeHub.tranformation_without_i:
+            #print(transformation.to_rdd, transformation.from_rdd, transformation.is_narrow)
         
         for transformation in SizeAndTimeHub.tranformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
@@ -624,18 +645,52 @@ class SparkDataflowVisualizer():
                 caching_plan_label += "\nCache "
             else:
                 caching_plan_label += "\nUnpersist "
-            caching_plan_label += "RDD[" + str(caching_plan_item.rdd_id) + "] " + ("at" if caching_plan_item.is_cache_item else "after") + " stage(" + str(caching_plan_item.stage_id) + ") in job(" + str(caching_plan_item.job_id) + ")\n"
+            #cache_rdd variable used below will store the correct rdd.id of the instrumented rdd's map partition's id after refactoring & renumbering the rdds list
+            cache_rdd = 0
+            if caching_plan_item.rdd_id-1 in FactHub.rdds_lst_index_dict.keys():
+                cache_rdd = FactHub.rdds_lst_index_dict[caching_plan_item.rdd_id-1]#caching_plan_label += "RDD[" + str(caching_plan_item.rdd_id - 1) + "] " + ("at" if caching_plan_item.is_cache_item else "after") + " stage(" + str(caching_plan_item.stage_id) + ") in job(" + str(caching_plan_item.job_id) + ")\n"
+            caching_plan_label += "RDD[" + str(cache_rdd) + "] " + ("at" if caching_plan_item.is_cache_item else "after") + " stage(" + str(caching_plan_item.stage_id) + ") in job(" + str(caching_plan_item.job_id) + ")\n"
         caching_plan_label += "\n"
         if len(AnalysisHub.caching_plan_lst) > 0 and config['Caching_Anomalies']['show_caching_plan'] == "true":
             dot.node("caching_plan", shape = 'note', fillcolor = 'lightgray', style = 'filled', label = caching_plan_label)
+        
         memory_footprint_label = "\nMemory Footprint:\n"
+        total_size = 0
         for memory_footprint_item in AnalysisHub.memory_footprint_lst:
+            temp = set()
+            temp1 = set()
+            for val in memory_footprint_item[2]:
+                temp.add(val-1)
+            for val in temp:
+                if val in SizeAndTimeHub.rddID_size:
+                    size_in_mb = SizeAndTimeHub.rddID_size[val] / 1000000
+                    rounded_size = round(size_in_mb,3)
+                if val in SizeAndTimeHub.root_rdd_size:
+                    size_in_mb = SizeAndTimeHub.root_rdd_size[val] / 1000000
+                    rounded_size = round(size_in_mb,3)
+                if val in SizeAndTimeHub.last_rdd_size:
+                    size_in_mb = SizeAndTimeHub.last_rdd_size[val] / 1000000
+                    rounded_size = round(size_in_mb,3)
+                total_size = total_size + rounded_size
+            print(total_size)
+            
+            for val in memory_footprint_item[2]:
+                temp1.add(FactHub.rdds_lst_index_dict[val-1])
+            temp1 = set()
+            for val in memory_footprint_item[2]:
+                temp1.add(FactHub.rdds_lst_index_dict[val-1])
+            memory_footprint_item[2].clear()
+            for rdd_id in temp1:
+                memory_footprint_item[2].add(rdd_id)
+            print(memory_footprint_item[2])
             memory_footprint_label += "\n"
             if len(memory_footprint_item[2]) == 0:
                 memory_footprint_label += "Free"
             else:
                 memory_footprint_label += str(memory_footprint_item[2])
             memory_footprint_label += "\n"
+        memory_footprint_label += "\n"
+        memory_footprint_label += "Total size of cached RDDs: " + str(total_size) + " mb"
         memory_footprint_label += "\n"
         if len(AnalysisHub.caching_plan_lst) > 0 and config['Caching_Anomalies']['show_memory_footprint'] == "true":
             dot.node("memory_footprint", shape = 'note', fillcolor = 'lightgray', style = 'filled', label = memory_footprint_label)
@@ -651,12 +706,13 @@ class SparkDataflowVisualizer():
 
 def load_file(file_name):
     spark_dataflow_visualizer_input_path = Utility.get_absolute_path(config['Paths']['input_path'])
+    print(spark_dataflow_visualizer_input_path)
     log_file_path = spark_dataflow_visualizer_input_path + '/' + file_name
     SparkDataflowVisualizer.init()
     SparkDataflowVisualizer.parse(log_file_path)
 
 def draw_DAG():
-    SparkDataflowVisualizer.analyze()
+    SparkDataflowVisualizer.analyze() 
     SparkDataflowVisualizer.rdds_lst_refactor()
     SparkDataflowVisualizer.visualize_property_DAG()
     
