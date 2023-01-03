@@ -8,6 +8,7 @@ from collections import OrderedDict
 from copy import copy
 import re
 import configparser
+import queue
 from pathlib import Path
 
 config = configparser.ConfigParser()
@@ -263,6 +264,8 @@ class Parser():
         for i in FactHub.stage_no_of_tasks:
             total = 0
             for x in range(0, FactHub.stage_no_of_tasks[i]):
+                if len(queue)==0:
+                    break
                 total = total + queue[0]
                 queue.pop(0)
             FactHub.stage_total[i] = total
@@ -314,8 +317,11 @@ class Parser():
                     operator_s_stage = stage
             if operator_s_stage == stage_with_max_tasks:
                 SizeAndTimeHub.rddID_size[operator] = FactHub.operator_partition_size[operator]
+                #print(SizeAndTimeHub.rddID_size[operator])
             else:
-                SizeAndTimeHub.rddID_size[operator] = FactHub.operator_partition_size[operator] * (stage_with_max_tasks / FactHub.stage_no_of_tasks)   
+                #SizeAndTimeHub.rddID_size[operator] = FactHub.operator_partition_size[operator] * (stage_with_max_tasks / FactHub.stage_no_of_tasks)
+                SizeAndTimeHub.rddID_size[operator] = FactHub.operator_partition_size[operator] * (FactHub.stage_no_of_tasks[stage_with_max_tasks])
+        print(SizeAndTimeHub.rddID_size)
             
     def prepare_from_job_start_events(job_start_events):
         job_ids_list = job_start_events['Job ID'].tolist()
@@ -566,8 +572,9 @@ class SparkDataflowVisualizer():
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
                     if config['Drawing']['show_action_id'] == "true":
-                        renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
-                        node_label = "[" + str(renumbered_rdd_id) + "] " 
+                        #renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
+                        #node_label = "[" + str(renumbered_rdd_id) + "] "
+                        node_label = "[" + str(rdd.id) + "] "
                     if config['Drawing']['show_rdd_name'] == "true":
                         node_label = node_label + rdd.name[:int(config['Drawing']['rdd_name_max_number_of_chars'])]
                     if config['Drawing']['show_rdd_size'] == "true":
@@ -575,11 +582,11 @@ class SparkDataflowVisualizer():
                             size_in_mb = SizeAndTimeHub.rddID_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
                             node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
-                        if rdd.id in SizeAndTimeHub.root_rdd_size:
+                        elif rdd.id in SizeAndTimeHub.root_rdd_size:
                             size_in_mb = SizeAndTimeHub.root_rdd_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
                             node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
-                        if rdd.id in SizeAndTimeHub.last_rdd_size:
+                        elif rdd.id in SizeAndTimeHub.last_rdd_size:
                             size_in_mb = SizeAndTimeHub.last_rdd_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
                             node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
@@ -656,39 +663,49 @@ class SparkDataflowVisualizer():
         
         memory_footprint_label = "\nMemory Footprint:\n"
         total_size = 0
+        temp = set()
+        print(FactHub.rdds_lst_index_dict)
         for memory_footprint_item in AnalysisHub.memory_footprint_lst:
-            temp = set()
-            temp1 = set()
             for val in memory_footprint_item[2]:
                 temp.add(val-1)
-            for val in temp:
+        for val in temp:
                 if val in SizeAndTimeHub.rddID_size:
                     size_in_mb = SizeAndTimeHub.rddID_size[val] / 1000000
                     rounded_size = round(size_in_mb,3)
-                if val in SizeAndTimeHub.root_rdd_size:
+                elif val in SizeAndTimeHub.root_rdd_size:
                     size_in_mb = SizeAndTimeHub.root_rdd_size[val] / 1000000
                     rounded_size = round(size_in_mb,3)
-                if val in SizeAndTimeHub.last_rdd_size:
+                elif val in SizeAndTimeHub.last_rdd_size:
                     size_in_mb = SizeAndTimeHub.last_rdd_size[val] / 1000000
                     rounded_size = round(size_in_mb,3)
                 total_size = total_size + rounded_size
-            print(total_size)
-            
+                print(total_size)
+        tempo = set()
+        memory_footprint_items = []
+        for memory_footprint_item in AnalysisHub.memory_footprint_lst:
             for val in memory_footprint_item[2]:
-                temp1.add(FactHub.rdds_lst_index_dict[val-1])
-            temp1 = set()
-            for val in memory_footprint_item[2]:
-                temp1.add(FactHub.rdds_lst_index_dict[val-1])
-            memory_footprint_item[2].clear()
-            for rdd_id in temp1:
-                memory_footprint_item[2].add(rdd_id)
-            print(memory_footprint_item[2])
-            memory_footprint_label += "\n"
-            if len(memory_footprint_item[2]) == 0:
-                memory_footprint_label += "Free"
-            else:
-                memory_footprint_label += str(memory_footprint_item[2])
-            memory_footprint_label += "\n"
+                tempo.add(FactHub.rdds_lst_index_dict[val-1])
+        tempo = list(dict.fromkeys(tempo))
+        memory_footprint_label += "\n"
+        if len(tempo) == 0:
+            memory_footprint_label += "Free"
+        else:
+            memory_footprint_label += str(tempo)
+        memory_footprint_label += "\n"
+        #for memory_footprint_item in AnalysisHub.memory_footprint_lst:
+        #    temp1 = set()
+        #    for val in memory_footprint_item[2]:
+        #        temp1.add(FactHub.rdds_lst_index_dict[val-1])
+        #    memory_footprint_item[2].clear()
+        #    for rdd_id in temp1:
+        #        memory_footprint_item[2].add(rdd_id)
+        #    print(memory_footprint_item[2])
+        #    memory_footprint_label += "\n"
+        #    if len(memory_footprint_item[2]) == 0:
+        #        memory_footprint_label += "Free"
+        #    else:
+        #        memory_footprint_label += str(memory_footprint_item[2])
+        #    memory_footprint_label += "\n"
         memory_footprint_label += "\n"
         memory_footprint_label += "Total size of cached RDDs: " + str(total_size) + " mb"
         memory_footprint_label += "\n"
