@@ -169,6 +169,8 @@ class SizeAndTimeHub():
     rdds_lst_InstrumentedRdds_id = []
     rdds_lst_renumbered = []
     tranformation_without_i = []
+    tranformation_from_to = {}
+    cached_rdds_lst = []
     
     def flush():
         SizeAndTimeHub.root_rdd_size = {}
@@ -180,6 +182,8 @@ class SizeAndTimeHub():
         SizeAndTimeHub.rdds_lst_InstrumentedRdds_id = []
         SizeAndTimeHub.rdds_lst_renumbered = []
         SizeAndTimeHub.tranformation_without_i = []
+        SizeAndTimeHub.tranformation_from_to = {}
+        SizeAndTimeHub.cached_rdds_lst = []
 
         
 class Parser():    
@@ -321,7 +325,9 @@ class Parser():
             else:
                 #SizeAndTimeHub.rddID_size[operator] = FactHub.operator_partition_size[operator] * (stage_with_max_tasks / FactHub.stage_no_of_tasks)
                 SizeAndTimeHub.rddID_size[operator] = FactHub.operator_partition_size[operator] * (FactHub.stage_no_of_tasks[stage_with_max_tasks])
-        print(SizeAndTimeHub.rddID_size)
+        #print(SizeAndTimeHub.rddID_size)
+        #print("================================")
+        #print(FactHub.operator_partition_size)
             
     def prepare_from_job_start_events(job_start_events):
         job_ids_list = job_start_events['Job ID'].tolist()
@@ -464,9 +470,9 @@ class Analyzer():
         for rdd_id, rdd_usage_lifetime in AnalysisHub.rdd_usage_lifetime_dict.items():
             if config['Caching_Anomalies']['include_caching_anomalies_in_caching_plan'] == "true" or rdd_id not in AnalysisHub.anomalies_dict:
                 AnalysisHub.caching_plan_lst.append(CachingPlanItem(rdd_usage_lifetime[0], rdd_usage_lifetime[1], rdd_id, True))
-                print(rdd_usage_lifetime[0], rdd_usage_lifetime[1], rdd_id)
+                #print(rdd_usage_lifetime[0], rdd_usage_lifetime[1], rdd_id)
                 AnalysisHub.caching_plan_lst.append(CachingPlanItem(rdd_usage_lifetime[2], rdd_usage_lifetime[3], rdd_id, False)) 
-                print(rdd_usage_lifetime[2], rdd_usage_lifetime[3], rdd_id)
+                #print(rdd_usage_lifetime[2], rdd_usage_lifetime[3], rdd_id)
         AnalysisHub.memory_footprint_lst = []
         incremental_rdds_set = set()
         for caching_plan_item in sorted(AnalysisHub.caching_plan_lst):
@@ -550,7 +556,37 @@ class SparkDataflowVisualizer():
             #print(rdd.id, rdd.stage_id, rdd.job_id, rdd.name, rdd.parents_lst) 
             #id, name, parents_lst, stage_id, job_id, is_cached
         
+        for rdd in SizeAndTimeHub.rdds_lst_refactored:
+            if rdd.is_cached:
+                SizeAndTimeHub.cached_rdds_lst.append(rdd.id)
+        SizeAndTimeHub.cached_rdds_lst = list(dict.fromkeys(SizeAndTimeHub.cached_rdds_lst))
+        #print(SizeAndTimeHub.cached_rdds_lst)
+        
     def visualize_property_DAG():
+        #SizeAndTimeHub.tranformation_from_to has been used in at config['Drawing']['show_rdd_reach_time'], we need that dict in beforehand 
+        #thats why the below loops have been implemented before "dot = grahpviz.Digraph" code line
+        #to create SizeAndTimeHub.tranformation_without_i to contain rdd ids without instrumentation ids but will have duplicates
+        for transformation in sorted(AnalysisHub.transformations_set):
+            if transformation.to_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id and transformation.from_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id:
+                SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
+            if transformation.from_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id:
+                SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd - 1, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
+            if transformation.to_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id:
+                SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd - 1, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
+        #to refactor SizeAndTimeHub.tranformation_without_i to remove duplicates
+        temp_lst_for_tranformation_without_i = []
+        for transformation in SizeAndTimeHub.tranformation_without_i:
+            if(transformation.to_rdd != transformation.from_rdd):
+                temp_lst_for_tranformation_without_i.append(transformation)
+        SizeAndTimeHub.tranformation_without_i.clear()
+        for transformation in temp_lst_for_tranformation_without_i:
+            SizeAndTimeHub.tranformation_without_i.append(transformation)
+        for transformation in SizeAndTimeHub.tranformation_without_i:
+            #print(transformation.to_rdd, transformation.from_rdd, transformation.is_narrow)
+            SizeAndTimeHub.tranformation_from_to[transformation.from_rdd] = transformation.to_rdd
+        #for rdd in SizeAndTimeHub.tranformation_from_to:
+            #print(rdd, SizeAndTimeHub.tranformation_from_to[rdd])
+        
         dot = graphviz.Digraph(strict=True, comment='Spark-Application-Graph', format = config['Output']['selected_format'])
         dot.attr('node', shape=config['Drawing']['rdd_shape'], label='this is graph')
         dot.node_attr={'shape': 'plaintext'}
@@ -572,9 +608,9 @@ class SparkDataflowVisualizer():
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
                     if config['Drawing']['show_action_id'] == "true":
-                        #renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
-                        #node_label = "[" + str(renumbered_rdd_id) + "] "
-                        node_label = "[" + str(rdd.id) + "] "
+                        renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
+                        node_label = "[" + str(renumbered_rdd_id) + "] "
+                        #node_label = "[" + str(rdd.id) + "] "
                     if config['Drawing']['show_rdd_name'] == "true":
                         node_label = node_label + rdd.name[:int(config['Drawing']['rdd_name_max_number_of_chars'])]
                     if config['Drawing']['show_rdd_size'] == "true":
@@ -590,6 +626,23 @@ class SparkDataflowVisualizer():
                             size_in_mb = SizeAndTimeHub.last_rdd_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
                             node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
+                    if config['Drawing']['show_rdd_reach_time'] == "true":
+                        reach_time = 0
+                        curr_rdd = rdd.id
+                        #while(prev_rdd not in SizeAndTimeHub.cached_rdds_lst and prev_rdd != 0):
+                        for x in range(100):
+                            if curr_rdd == 0:
+                                break
+                            prev_rdd = SizeAndTimeHub.tranformation_from_to[curr_rdd]
+                            reach_time = reach_time + SizeAndTimeHub.operator_timestamp[curr_rdd]
+                            if prev_rdd in SizeAndTimeHub.cached_rdds_lst or prev_rdd == 0:
+                                break
+                            curr_rdd = prev_rdd
+                        if reach_time >= 1000:
+                            reach_time = reach_time / 1000
+                            node_label = node_label + "\nreach time: " + str(reach_time) + " s"
+                        else:
+                            node_label = node_label + "\nreach time: " + str(reach_time) + " ms"
                     if config['Caching_Anomalies']['show_number_of_rdd_usage'] == "true":
                         node_label = node_label + "\nused: " + str(AnalysisHub.rdd_num_of_usage[rdd.id])
                     if config['Caching_Anomalies']['show_number_of_rdd_computations'] == "true":
@@ -612,24 +665,7 @@ class SparkDataflowVisualizer():
             dot.edge(str(job[0]), "Action_" + str(job_id), color = 'black', arrowhead = 'none', style = 'dashed')
             prev_action_name = action_name
         
-        #to create SizeAndTimeHub.tranformation_without_i to contain rdd ids without instrumentation ids but will have duplicates
-        for transformation in sorted(AnalysisHub.transformations_set):
-            if transformation.to_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id and transformation.from_rdd not in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id:
-                SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
-            if transformation.from_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id:
-                SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd - 1, transformation.to_rdd, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
-            if transformation.to_rdd in SizeAndTimeHub.rdds_lst_InstrumentedRdds_id:
-                SizeAndTimeHub.tranformation_without_i.append(TransformationWithoutI(transformation.from_rdd, transformation.to_rdd - 1, Analyzer.is_narrow_transformation(transformation.from_rdd, transformation.to_rdd)))
-        #to refactor SizeAndTimeHub.tranformation_without_i to remove duplicates
-        temp_lst_for_tranformation_without_i = []
-        for transformation in SizeAndTimeHub.tranformation_without_i:
-            if(transformation.to_rdd != transformation.from_rdd):
-                temp_lst_for_tranformation_without_i.append(transformation)
-        SizeAndTimeHub.tranformation_without_i.clear()
-        for transformation in temp_lst_for_tranformation_without_i:
-            SizeAndTimeHub.tranformation_without_i.append(transformation)
-        #for transformation in SizeAndTimeHub.tranformation_without_i:
-            #print(transformation.to_rdd, transformation.from_rdd, transformation.is_narrow)
+        
         
         for transformation in SizeAndTimeHub.tranformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
@@ -645,7 +681,7 @@ class SparkDataflowVisualizer():
                         time = time / 1000
                         rounded_time = round(time,1)
                         dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " s")
-
+        
         caching_plan_label = "\nRecommended Schedule:\n"
         for caching_plan_item in sorted(AnalysisHub.caching_plan_lst):
             if caching_plan_item.is_cache_item:
@@ -664,7 +700,7 @@ class SparkDataflowVisualizer():
         memory_footprint_label = "\nMemory Footprint:\n"
         total_size = 0
         temp = set()
-        print(FactHub.rdds_lst_index_dict)
+        #print(FactHub.rdds_lst_index_dict)
         for memory_footprint_item in AnalysisHub.memory_footprint_lst:
             for val in memory_footprint_item[2]:
                 temp.add(val-1)
@@ -679,7 +715,7 @@ class SparkDataflowVisualizer():
                     size_in_mb = SizeAndTimeHub.last_rdd_size[val] / 1000000
                     rounded_size = round(size_in_mb,3)
                 total_size = total_size + rounded_size
-                print(total_size)
+                #print(total_size)
         tempo = set()
         memory_footprint_items = []
         for memory_footprint_item in AnalysisHub.memory_footprint_lst:
@@ -708,6 +744,7 @@ class SparkDataflowVisualizer():
         #    memory_footprint_label += "\n"
         memory_footprint_label += "\n"
         memory_footprint_label += "Total size of cached RDDs: " + str(total_size) + " mb"
+        memory_footprint_label += "\n"
         memory_footprint_label += "\n"
         if len(AnalysisHub.caching_plan_lst) > 0 and config['Caching_Anomalies']['show_memory_footprint'] == "true":
             dot.node("memory_footprint", shape = 'note', fillcolor = 'lightgray', style = 'filled', label = memory_footprint_label)
