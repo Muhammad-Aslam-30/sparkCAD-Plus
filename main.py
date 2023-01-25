@@ -615,9 +615,9 @@ class SparkDataflowVisualizer():
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
                     if config['Drawing']['show_action_id'] == "true":
-                        #renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
-                        #node_label = "[" + str(renumbered_rdd_id) + "] "
-                        node_label = "[" + str(rdd.id) + "] "
+                        renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
+                        node_label = "[" + str(renumbered_rdd_id) + "] "
+                        #node_label = "[" + str(rdd.id) + "] "
                     if config['Drawing']['show_rdd_name'] == "true":
                         node_label = node_label + rdd.name[:int(config['Drawing']['rdd_name_max_number_of_chars'])]
                     if config['Drawing']['show_rdd_size'] == "true":
