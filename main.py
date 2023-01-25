@@ -584,8 +584,15 @@ class SparkDataflowVisualizer():
         for transformation in SizeAndTimeHub.tranformation_without_i:
             #print(transformation.to_rdd, transformation.from_rdd, transformation.is_narrow)
             SizeAndTimeHub.tranformation_from_to[transformation.from_rdd] = transformation.to_rdd
-        #for rdd in SizeAndTimeHub.tranformation_from_to:
-            #print(rdd, SizeAndTimeHub.tranformation_from_to[rdd])
+        for rdd in SizeAndTimeHub.tranformation_from_to:
+            print(rdd, SizeAndTimeHub.tranformation_from_to[rdd])
+        
+        tlist = []
+        for rdd in SizeAndTimeHub.rdds_lst_refactored:
+            tlist.append(rdd.id)
+        print(sorted(tlist))
+        print(SizeAndTimeHub.operator_timestamp)
+        
         
         dot = graphviz.Digraph(strict=True, comment='Spark-Application-Graph', format = config['Output']['selected_format'])
         dot.attr('node', shape=config['Drawing']['rdd_shape'], label='this is graph')
@@ -608,9 +615,9 @@ class SparkDataflowVisualizer():
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
                     if config['Drawing']['show_action_id'] == "true":
-                        renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
-                        node_label = "[" + str(renumbered_rdd_id) + "] "
-                        #node_label = "[" + str(rdd.id) + "] "
+                        #renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
+                        #node_label = "[" + str(renumbered_rdd_id) + "] "
+                        node_label = "[" + str(rdd.id) + "] "
                     if config['Drawing']['show_rdd_name'] == "true":
                         node_label = node_label + rdd.name[:int(config['Drawing']['rdd_name_max_number_of_chars'])]
                     if config['Drawing']['show_rdd_size'] == "true":
@@ -629,13 +636,16 @@ class SparkDataflowVisualizer():
                     if config['Drawing']['show_rdd_reach_time'] == "true":
                         reach_time = 0
                         curr_rdd = rdd.id
+                        print(curr_rdd)
                         #while(prev_rdd not in SizeAndTimeHub.cached_rdds_lst and prev_rdd != 0):
                         for x in range(100):
-                            if curr_rdd == 0:
+                            if curr_rdd == 0 or curr_rdd not in SizeAndTimeHub.tranformation_from_to.keys():
                                 break
                             prev_rdd = SizeAndTimeHub.tranformation_from_to[curr_rdd]
-                            reach_time = reach_time + SizeAndTimeHub.operator_timestamp[curr_rdd]
+                            if curr_rdd in SizeAndTimeHub.operator_timestamp.keys():
+                                reach_time = reach_time + SizeAndTimeHub.operator_timestamp[curr_rdd]
                             if prev_rdd in SizeAndTimeHub.cached_rdds_lst or prev_rdd == 0:
+                            #if prev_rdd == 0:
                                 break
                             curr_rdd = prev_rdd
                         if reach_time >= 1000:
