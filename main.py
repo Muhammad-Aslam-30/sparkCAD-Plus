@@ -815,8 +815,6 @@ def load_file(file_name):
     spark_dataflow_visualizer_input_path = Utility.get_absolute_path(config['Paths']['input_path'])
     print(spark_dataflow_visualizer_input_path)
     log_file_path = spark_dataflow_visualizer_input_path + '/' + file_name
-    #SparkDataflowVisualizer.init()
-    #SparkDataflowVisualizer.parse(log_file_path)
     load_facthub_data(file_name, log_file_path)
 
 def draw_DAG():
