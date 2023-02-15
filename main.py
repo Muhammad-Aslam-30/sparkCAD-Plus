@@ -626,9 +626,9 @@ class SparkDataflowVisualizer():
                             curr_rdd = prev_rdd
                         if reach_time >= 1000:
                             reach_time = reach_time / 1000
-                            node_label = node_label + "\nreach time: " + str(reach_time) + " s"
+                            node_label = node_label + "\nComputation time: " + str(reach_time) + " s"
                         else:
-                            node_label = node_label + "\nreach time: " + str(reach_time) + " ms"
+                            node_label = node_label + "\nComputation time: " + str(reach_time) + " ms"
                     if config['Caching_Anomalies']['show_number_of_rdd_usage'] == "true":
                         node_label = node_label + "\nused: " + str(AnalysisHub.rdd_num_of_usage[rdd.id])
                     if config['Caching_Anomalies']['show_number_of_rdd_computations'] == "true":
