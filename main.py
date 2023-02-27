@@ -886,7 +886,3 @@ def dont_cache(rdd_id):
     AnalysisHub.non_cached_rdds_set.add(key+1)
     AnalysisHub.cached_rdds_set.discard(key+1)
     draw_DAG()
-
-def flush_all():
-    FactHub.flush()
-    AnalysisHub.flush()
