@@ -156,19 +156,35 @@ class FactHub():
     def flush():
         FactHub.app_name = ""
         FactHub.job_info_dect = {}
-        FactHub.job_last_stage = {}
         FactHub.stage_info_dect = {}
         FactHub.stage_job_dect = {}
         FactHub.stage_name_dect = {}
         FactHub.submitted_stage_last_rdd_dect = {}
-        FactHub.job_last_rdd_dect = {}
+        FactHub.stage_no_of_tasks = {}
+        FactHub.stage_i_operator_dect = defaultdict(list)
+        FactHub.stage_i_operators_id = defaultdict(list)
         FactHub.submitted_stages.clear()
         FactHub.rdds_lst = []
+        FactHub.operator_partition_size = {}
+        FactHub.rddID_in_stage = defaultdict(list)
+        FactHub.stage_operator_partition = {}
+        #total = accumulables_update + bytes_written
+        FactHub.stage_total = {}
+        FactHub.job_last_rdd = {}
+        FactHub.job_last_rdd_dect = {}
+        FactHub.job_last_stage = {}
+        FactHub.rdd_id_stage_with_max_tasks = {}
+        FactHub.task_in_which_stage = {}
+        FactHub.rdds_lst_index_dict = {}
+        FactHub.taskid_launchtime = {}
+        FactHub.taskid_finishtime = {}
+        FactHub.taskid_operator_dect = defaultdict(list)
         FactHub.root_rdd_size = {}
         FactHub.rddID_size = {}
         FactHub.last_rdd_size = {}
         FactHub.operator_timestamp = {}
         FactHub.rdds_lst_renumbered = []
+        FactHub.transformations = []
         FactHub.rdds_lst_refactored = []
         FactHub.rdds_lst_InstrumentedRdds = []
         FactHub.rdds_lst_InstrumentedRdds_id = []
@@ -203,7 +219,11 @@ class AnalysisHub():
         AnalysisHub.stage_used_rdds = {}
         AnalysisHub.computed_rdds.clear()
         AnalysisHub.rdd_usage_lifetime_dict = {}
-        AnalysisHub.cached_rdds_lst = []
+        AnalysisHub.caching_plan_lst = []
+        #AnalysisHub.memory_footprint_lst = []
+        #AnalysisHub.cached_rdds_set.clear()
+        #AnalysisHub.non_cached_rdds_set.clear()
+        #AnalysisHub.cached_rdds_lst = []
         AnalysisHub.rdds_computation_time = []
         AnalysisHub.recommended_schedule_cache_at = {}
         AnalysisHub.recommended_schedule_unpersist_after = {}
@@ -255,6 +275,8 @@ class Parser():
                         FactHub.operator_timestamp[rdd] = FactHub.operator_timestamp[rdd] + first_operator_time
                     else:
                         FactHub.operator_timestamp[rdd] = last_operator_time
+        print("FactHub.operator_timestamp")
+        print(FactHub.operator_timestamp)
         
     def prepare_leaf_from_task_end_events(task_end_events):
         stage_id_for_a_task = task_end_events['Stage ID'].tolist()
@@ -594,15 +616,30 @@ class SparkDataflowVisualizer():
                         if rdd.id in FactHub.rddID_size:
                             size_in_mb = FactHub.rddID_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
-                            node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
+                            if rounded_size >= 1024:
+                                rounded_size = rounded_size / 1024
+                                rounded_size = round(rounded_size,3)
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " gb"
+                            else:
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
                         elif rdd.id in FactHub.root_rdd_size:
                             size_in_mb = FactHub.root_rdd_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
-                            node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
+                            if rounded_size >= 1024:
+                                rounded_size = rounded_size / 1024
+                                rounded_size = round(rounded_size,3)
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " gb"
+                            else:
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
                         elif rdd.id in FactHub.last_rdd_size:
                             size_in_mb = FactHub.last_rdd_size[rdd.id] / 1000000
                             rounded_size = round(size_in_mb,3)
-                            node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
+                            if rounded_size >= 1024:
+                                rounded_size = rounded_size / 1024
+                                rounded_size = round(rounded_size,3)
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " gb"
+                            else:
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
                     if config['Drawing']['show_rdd_computation_time'] == "true":
                         reach_time = 0
                         curr_rdd = rdd.id
@@ -618,7 +655,18 @@ class SparkDataflowVisualizer():
                             curr_rdd = prev_rdd
                         if reach_time >= 1000: #1000 is milliseconds ~1sec
                             reach_time = reach_time / 1000
-                            node_label = node_label + "\nComputation time: " + str(reach_time) + " s"
+                            reach_time = round(reach_time,1)
+                            if reach_time >= 60:
+                                reach_time = reach_time / 60
+                                reach_time = round(reach_time,1)
+                                if reach_time >= 60:
+                                    reach_time = reach_time / 60
+                                    reach_time = round(reach_time,1)
+                                    node_label = node_label + "\nComputation time: " + str(reach_time) + " hr"
+                                else:
+                                    node_label = node_label + "\nComputation time: " + str(reach_time) + " min"
+                            else:
+                                node_label = node_label + "\nComputation time: " + str(reach_time) + " s"
                         else:
                             node_label = node_label + "\nComputation time: " + str(reach_time) + " ms"
                     if config['Caching_Anomalies']['show_number_of_rdd_usage'] == "true":
@@ -656,7 +704,17 @@ class SparkDataflowVisualizer():
                     else:
                         time = time / 1000
                         rounded_time = round(time,1)
-                        dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " s")
+                        if rounded_time >= 60:
+                            rounded_time = rounded_time / 60
+                            rounded_time = round(rounded_time,1)
+                            if rounded_time >= 60:
+                                rounded_time = rounded_time / 60
+                                rounded_time = round(rounded_time,1)
+                                dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " hr")
+                            else:
+                                dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " min")
+                        else:
+                            dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " s")
         
         caching_plan_label = "\nRecommended Schedule:\n"
         for caching_plan_item in sorted(AnalysisHub.caching_plan_lst):
@@ -812,6 +870,10 @@ def draw_DAG():
     SparkDataflowVisualizer.analyze() 
     SparkDataflowVisualizer.rdds_lst_refactor()
     SparkDataflowVisualizer.visualize_property_DAG()
+    AnalysisHub.memory_footprint_lst = []
+    AnalysisHub.cached_rdds_set.clear()
+    AnalysisHub.non_cached_rdds_set.clear()
+    AnalysisHub.cached_rdds_lst = []
     
 def cache(rdd_id):
     key = list(FactHub.rdds_lst_index_dict.keys())[list(FactHub.rdds_lst_index_dict.values()).index(rdd_id)]
@@ -824,3 +886,7 @@ def dont_cache(rdd_id):
     AnalysisHub.non_cached_rdds_set.add(key+1)
     AnalysisHub.cached_rdds_set.discard(key+1)
     draw_DAG()
+
+def flush_all():
+    FactHub.flush()
+    AnalysisHub.flush()
