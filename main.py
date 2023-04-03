@@ -283,8 +283,6 @@ class Parser():
                         FactHub.operator_timestamp[rdd] = FactHub.operator_timestamp[rdd] + first_operator_time
                     else:
                         FactHub.operator_timestamp[rdd] = last_operator_time
-        #print("FactHub.operator_timestamp")
-        #print(FactHub.operator_timestamp)
         
     def prepare_leaf_from_task_end_events(task_end_events):
         stage_id_for_a_task = task_end_events['Stage ID'].tolist()
@@ -584,10 +582,6 @@ class SparkDataflowVisualizer():
         for rdd in FactHub.rdds_lst_refactored:
             FactHub.rdds_lst_renumbered.append(Rdd(FactHub.rdds_lst_index_dict[rdd.id],rdd.name, rdd.parents_lst, rdd.stage_id, rdd.job_id, rdd.is_cached))
         
-        for rdd in FactHub.rdds_lst_refactored:
-            if rdd.is_cached:
-                AnalysisHub.cached_rdds_lst.append(FactHub.rdds_lst_index_dict[rdd.id])
-        AnalysisHub.cached_rdds_lst = list(dict.fromkeys(AnalysisHub.cached_rdds_lst))
         #AnalysisHub.transformation_from_to has been used in at config['Drawing']['show_rdd_computation_time'], we need that dict in beforehand 
         #thats why the below loops have been implemented before "dot = grahpviz.Digraph" code line
         #to create AnalysisHub.transformation_without_i to contain rdd ids without instrumentation ids but will have duplicates
@@ -612,11 +606,16 @@ class SparkDataflowVisualizer():
         if not CommonHub.shuffled_rdds_id:
             for i, rdd in enumerate(FactHub.rdds_lst):
                 if ("ShuffledRDD" in rdd.name):
-                    CommonHub.shuffled_rdds_id.append(rdd.id)   
-        #print("CommonHub.shuffled_rdds_id")
-        #print(CommonHub.shuffled_rdds_id)
+                    CommonHub.shuffled_rdds_id.append(rdd.id)
+    
+    def cache_rdds_handling():
+        for rdd in FactHub.rdds_lst_refactored:
+            print("rdd id " + str(rdd.id) + " cache status " + str(rdd.is_cached))
+            if rdd.is_cached:
+                AnalysisHub.cached_rdds_lst.append(FactHub.rdds_lst_index_dict[rdd.id])
+        AnalysisHub.cached_rdds_lst = list(dict.fromkeys(AnalysisHub.cached_rdds_lst))
         
-    def visualize_property_DAG():        
+    def visualize_property_DAG():
         dot = graphviz.Digraph(strict=True, comment='Spark-Application-Graph', format = config['Output']['selected_format'])
         dot.attr('node', shape=config['Drawing']['rdd_shape'], label='this is graph')
         dot.node_attr={'shape': 'plaintext'}
@@ -673,7 +672,7 @@ class SparkDataflowVisualizer():
                                 node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
                     if config['Drawing']['show_rdd_computation_time'] == "true":
                         reach_time = 0
-                        curr_rdd = rdd.id
+                        curr_rdd = rdd.id    
                         while 1: #loop runs until it reaches root parent node or cached node while traversing a RDD's parents
                             if curr_rdd == 0 or curr_rdd not in AnalysisHub.transformation_from_to.keys():
                                 break
@@ -684,6 +683,7 @@ class SparkDataflowVisualizer():
                             if prev_rdd_index in AnalysisHub.cached_rdds_lst or prev_rdd == 0:
                                 break
                             curr_rdd = prev_rdd
+                        print("reach time outside while loop " + str(reach_time))
                         if reach_time >= 1000: #1000 is milliseconds ~1sec
                             reach_time = reach_time / 1000
                             reach_time = round(reach_time,1)
@@ -924,11 +924,12 @@ def load_file(file_name):
 def draw_DAG():
     SparkDataflowVisualizer.analyze() 
     SparkDataflowVisualizer.rdds_lst_refactor()
+    SparkDataflowVisualizer.cache_rdds_handling()
     SparkDataflowVisualizer.visualize_property_DAG()
-    AnalysisHub.memory_footprint_lst = []
-    AnalysisHub.cached_rdds_set.clear()
-    AnalysisHub.non_cached_rdds_set.clear()
-    AnalysisHub.cached_rdds_lst = []
+    #AnalysisHub.memory_footprint_lst = []
+    #AnalysisHub.cached_rdds_set.clear()
+    #AnalysisHub.non_cached_rdds_set.clear()
+    #AnalysisHub.cached_rdds_lst = []
     
 def cache(rdd_id):
     key = list(FactHub.rdds_lst_index_dict.keys())[list(FactHub.rdds_lst_index_dict.values()).index(rdd_id)]
@@ -941,4 +942,6 @@ def dont_cache(rdd_id):
     print(key+1)
     AnalysisHub.non_cached_rdds_set.add(key+1)
     AnalysisHub.cached_rdds_set.discard(key+1)
-    draw_DAG()
+    SparkDataflowVisualizer.analyze() 
+    SparkDataflowVisualizer.rdds_lst_refactor()
+    SparkDataflowVisualizer.visualize_property_DAG()
