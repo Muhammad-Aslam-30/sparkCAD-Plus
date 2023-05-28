@@ -188,14 +188,6 @@ class FactHub():
         FactHub.rdds_lst_refactored = []
         FactHub.rdds_lst_InstrumentedRdds = []
         FactHub.rdds_lst_InstrumentedRdds_id = []
-
-class CommonHub():
-    stage_shuffle_time_dict = {}
-    shuffled_rdds_id = []
-    
-    def flush():
-        CommonHub.stage_shuffle_time_dict = {}
-        CommonHub.shuffled_rdds_id = []
         
 class AnalysisHub():
     
@@ -217,6 +209,10 @@ class AnalysisHub():
     recommended_schedule_unpersist_after = {}
     transformation_without_i = []
     transformation_from_to = {}
+    stage_shuffle_writetime_dict = {}
+    stage_shuffle_readtime_dict = {}
+    stage_shuffle_time_dict = {}
+    shuffled_rdds_id = []
 
     def flush():
         AnalysisHub.transformations_set.clear()
@@ -237,6 +233,10 @@ class AnalysisHub():
         AnalysisHub.recommended_schedule_unpersist_after = {}
         AnalysisHub.transformation_without_i = []
         AnalysisHub.transformation_from_to = {}
+        AnalysisHub.stage_shuffle_writetime_dict = {}
+        AnalysisHub.stage_shuffle_readtime_dict = {}
+        AnalysisHub.stage_shuffle_time_dict = {}
+        AnalysisHub.shuffled_rdds_id = []
         
 class Parser():    
     
@@ -324,16 +324,40 @@ class Parser():
                 shuffle_write_time = task_metrics['Shuffle Write Metrics']['Shuffle Write Time']
                 queue.append(shuffle_write_time)
         for i, stage in enumerate(stage_id_for_a_task):
-            if int(stage) not in CommonHub.stage_shuffle_time_dict.keys():
+            if int(stage) not in AnalysisHub.stage_shuffle_writetime_dict.keys():
                 #calculated_with_launchtime = FactHub.taskid_launchtime[i] - queue[0]
-                #CommonHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime
-                CommonHub.stage_shuffle_time_dict[int(stage)] = queue[0]
+                #AnalysisHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime
+                AnalysisHub.stage_shuffle_writetime_dict[int(stage)] = queue[0]
                 queue.pop(0)
             else:
                 #calculated_with_launchtime = FactHub.taskid_launchtime[i] - queue[0]
-                #CommonHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime + CommonHub.stage_shuffle_time_dict[int(stage)]
-                CommonHub.stage_shuffle_time_dict[int(stage)] = queue[0] + CommonHub.stage_shuffle_time_dict[int(stage)]
+                #AnalysisHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime + AnalysisHub.stage_shuffle_time_dict[int(stage)]
+                AnalysisHub.stage_shuffle_writetime_dict[int(stage)] = queue[0] + AnalysisHub.stage_shuffle_writetime_dict[int(stage)]
                 queue.pop(0)
+        queue1 = []
+        for i, task_metrics in enumerate(task_end_events['Task Metrics']):
+            if "Fetch Wait Time" in task_metrics['Shuffle Read Metrics'].keys():
+                shuffle_read_time = task_metrics['Shuffle Read Metrics']['Fetch Wait Time']
+                queue1.append(shuffle_read_time)
+        for i, stage in enumerate(stage_id_for_a_task):
+            if int(stage) not in AnalysisHub.stage_shuffle_readtime_dict.keys():
+                #calculated_with_launchtime = FactHub.taskid_launchtime[i] - queue[0]
+                #AnalysisHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime
+                AnalysisHub.stage_shuffle_readtime_dict[int(stage)] = queue1[0]
+                queue1.pop(0)
+            else:
+                #calculated_with_launchtime = FactHub.taskid_launchtime[i] - queue[0]
+                #AnalysisHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime + AnalysisHub.stage_shuffle_time_dict[int(stage)]
+                AnalysisHub.stage_shuffle_readtime_dict[int(stage)] = queue1[0] + AnalysisHub.stage_shuffle_readtime_dict[int(stage)]
+                queue1.pop(0)
+        for i, stage in enumerate(FactHub.submitted_stages):
+            AnalysisHub.stage_shuffle_writetime_dict[stage] = AnalysisHub.stage_shuffle_writetime_dict[stage]/1000000
+            AnalysisHub.stage_shuffle_writetime_dict[stage] = round(AnalysisHub.stage_shuffle_writetime_dict[stage],1)
+        for i, stage in enumerate(FactHub.submitted_stages):
+            if i == len(FactHub.submitted_stages) - 1:
+                AnalysisHub.stage_shuffle_time_dict[i] = AnalysisHub.stage_shuffle_writetime_dict[i]
+                break
+            AnalysisHub.stage_shuffle_time_dict[i] = AnalysisHub.stage_shuffle_writetime_dict[i] + AnalysisHub.stage_shuffle_readtime_dict[i+1] 
             
     def prepare_root_from_stage_completed_events(stage_submitted_events):
         max_size_root_rdd = 0
@@ -603,14 +627,14 @@ class SparkDataflowVisualizer():
         for transformation in AnalysisHub.transformation_without_i:
             AnalysisHub.transformation_from_to[transformation.from_rdd] = transformation.to_rdd
         
-        if not CommonHub.shuffled_rdds_id:
+        if not AnalysisHub.shuffled_rdds_id:
             for i, rdd in enumerate(FactHub.rdds_lst):
                 if ("ShuffledRDD" in rdd.name):
-                    CommonHub.shuffled_rdds_id.append(rdd.id)
+                    AnalysisHub.shuffled_rdds_id.append(rdd.id)
     
     def cache_rdds_handling():
+        #To store cached rdds seperately in AnalysisHub
         for rdd in FactHub.rdds_lst_refactored:
-            print("rdd id " + str(rdd.id) + " cache status " + str(rdd.is_cached))
             if rdd.is_cached:
                 AnalysisHub.cached_rdds_lst.append(FactHub.rdds_lst_index_dict[rdd.id])
         AnalysisHub.cached_rdds_lst = list(dict.fromkeys(AnalysisHub.cached_rdds_lst))
@@ -637,9 +661,9 @@ class SparkDataflowVisualizer():
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
                     if config['Drawing']['show_action_id'] == "true":
-                        #renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
-                        #node_label = "[" + str(renumbered_rdd_id) + "] "
-                        node_label = "[" + str(rdd.id) + "] "
+                        renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
+                        node_label = "[" + str(renumbered_rdd_id) + "] "
+                        #node_label = "[" + str(rdd.id) + "] "
                     if config['Drawing']['show_rdd_name'] == "true":
                         node_label = node_label + rdd.name[:int(config['Drawing']['rdd_name_max_number_of_chars'])]
                     if config['Drawing']['show_rdd_size'] == "true":
@@ -683,7 +707,6 @@ class SparkDataflowVisualizer():
                             if prev_rdd_index in AnalysisHub.cached_rdds_lst or prev_rdd == 0:
                                 break
                             curr_rdd = prev_rdd
-                        print("reach time outside while loop " + str(reach_time))
                         if reach_time >= 1000: #1000 is milliseconds ~1sec
                             reach_time = reach_time / 1000
                             reach_time = round(reach_time,1)
@@ -722,12 +745,11 @@ class SparkDataflowVisualizer():
             dot.edge(str(job[0]), "Action_" + str(job_id), color = 'black', arrowhead = 'none', style = 'dashed')
             prev_action_name = action_name
         
-          
         for transformation in AnalysisHub.transformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
                 dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), color = config['Drawing']['narrow_transformation_color'] if transformation.is_narrow else config['Drawing']['wide_transformation_color'])
+        #
         for transformation in AnalysisHub.transformation_without_i:
-            #print(transformation.to_rdd, transformation.from_rdd)
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
                 if transformation.from_rdd in FactHub.operator_timestamp:
                     time = FactHub.operator_timestamp[transformation.from_rdd]
@@ -747,10 +769,10 @@ class SparkDataflowVisualizer():
                                 dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " min")
                         else:
                             dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " s")
-            if transformation.from_rdd in CommonHub.shuffled_rdds_id:
+            if transformation.from_rdd in AnalysisHub.shuffled_rdds_id:
                 rdd_shuffled_time = 0
                 for stage in FactHub.rddID_in_stage[transformation.from_rdd]:
-                    rdd_shuffled_time = rdd_shuffled_time + CommonHub.stage_shuffle_time_dict[stage]
+                    rdd_shuffled_time = rdd_shuffled_time + AnalysisHub.stage_shuffle_time_dict[stage]
                 if rdd_shuffled_time < 1000:
                     dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rdd_shuffled_time) + " ms")
                 else:
@@ -767,9 +789,6 @@ class SparkDataflowVisualizer():
                             dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " min")
                     else:
                         dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " s")
-                #print("rdd_shuffled_time for " + str(transformation.from_rdd) + " is " + str(rdd_shuffled_time))
-        #print("FactHub.rddID_in_stage")
-        #print(FactHub.rddID_in_stage)
                 
         caching_plan_label = "\nRecommended Schedule:\n"
         for caching_plan_item in sorted(AnalysisHub.caching_plan_lst):
@@ -913,8 +932,6 @@ def load_facthub_data(file_name, log_file_path):
         }
         with open(file_path, 'w') as f:
             json.dump(data, f)
-        
-# Useful functions for the demonstration 
 
 def load_file(file_name):
     spark_dataflow_visualizer_input_path = Utility.get_absolute_path(config['Paths']['input_path'])
@@ -939,7 +956,6 @@ def cache(rdd_id):
     
 def dont_cache(rdd_id):
     key = list(FactHub.rdds_lst_index_dict.keys())[list(FactHub.rdds_lst_index_dict.values()).index(rdd_id)]
-    print(key+1)
     AnalysisHub.non_cached_rdds_set.add(key+1)
     AnalysisHub.cached_rdds_set.discard(key+1)
     SparkDataflowVisualizer.analyze() 
