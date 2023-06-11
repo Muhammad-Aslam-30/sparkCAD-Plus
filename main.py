@@ -802,7 +802,16 @@ class SparkDataflowVisualizer():
         for transformation in AnalysisHub.transformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
                 dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), color = config['Drawing']['narrow_transformation_color'] if transformation.is_narrow else config['Drawing']['wide_transformation_color'])
-               
+        
+        print("AnalysisHub.stage_shuffle_time_dict")
+        print(AnalysisHub.stage_shuffle_time_dict)
+        print("dag_rdds_set")
+        print(dag_rdds_set)
+        print("AnalysisHub.shuffled_rdds_id")
+        print(AnalysisHub.shuffled_rdds_id)
+        print("FactHub.operator_timestamp")
+        print(FactHub.operator_timestamp)
+
         for transformation in AnalysisHub.transformation_without_i:
             print(str(transformation.to_rdd) + " " + str(transformation.from_rdd))
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
@@ -848,7 +857,7 @@ class SparkDataflowVisualizer():
                             dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(minutes)) + " m " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
                     else:
                         dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
-            if transformation.from_rdd not in dag_rdds_set and transformation.from_rdd not in AnalysisHub.shuffled_rdds_id:
+            if transformation.from_rdd not in FactHub.operator_timestamp and transformation.from_rdd not in AnalysisHub.shuffled_rdds_id:
                 milliseconds = random_number = random.randint(465098, 594340)
                 if milliseconds < 1000:
                     dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(milliseconds)) + " ms")
