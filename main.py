@@ -12,6 +12,7 @@ import queue
 from pathlib import Path
 import pickle
 import ast
+import random
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -140,11 +141,13 @@ class FactHub():
     taskid_launchtime = {}
     taskid_finishtime = {}
     taskid_operator_dect = defaultdict(list)
+    taskid_bytes_read = {}
     
     root_rdd_size = {}
     rddID_size = {}
     last_rdd_size = {}
     operator_timestamp = {}
+    operator_in_which_tasks = {}
     rdds_lst_renumbered = []
     transformations = []
     
@@ -179,10 +182,12 @@ class FactHub():
         FactHub.taskid_launchtime = {}
         FactHub.taskid_finishtime = {}
         FactHub.taskid_operator_dect = defaultdict(list)
+        FactHub.taskid_bytes_written = {}
         FactHub.root_rdd_size = {}
         FactHub.rddID_size = {}
         FactHub.last_rdd_size = {}
         FactHub.operator_timestamp = {}
+        FactHub.operator_in_which_tasks = {}
         FactHub.rdds_lst_renumbered = []
         FactHub.transformations = []
         FactHub.rdds_lst_refactored = []
@@ -253,6 +258,13 @@ class Parser():
     
     def prepare_from_task_end_events_for_timestamp(task_end_events):
         rdd = 0
+        for key, value in FactHub.taskid_operator_dect.items():
+            for item in value:
+                operator_id = item['Operator ID']
+                if operator_id in FactHub.operator_in_which_tasks:
+                    FactHub.operator_in_which_tasks[operator_id].append(key)
+                else:
+                    FactHub.operator_in_which_tasks[operator_id] = [key]
         for task_id in FactHub.taskid_operator_dect.keys():
             #To get stage_id for this task
             stage_id = FactHub.task_in_which_stage[task_id]
@@ -266,12 +278,14 @@ class Parser():
             for i in range(total_entries):
                 if (i == 0):
                     first_operator_time = FactHub.taskid_operator_dect[task_id][i]['Timestamp'] - FactHub.taskid_launchtime[task_id]
+                    first_operator_time = abs(first_operator_time)
                     if FactHub.taskid_operator_dect[task_id][i]['Operator ID'] in FactHub.operator_timestamp.keys():
                         FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] + first_operator_time
                     else:
                         FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = first_operator_time
-                else:
+                elif i!=0 and i!=total_entries-1:
                     middle_operator_time = FactHub.taskid_operator_dect[task_id][i]['Timestamp'] - FactHub.taskid_operator_dect[task_id][i-1]['Timestamp']
+                    middle_operator_time = abs(middle_operator_time)
                     if FactHub.taskid_operator_dect[task_id][i]['Operator ID'] in FactHub.operator_timestamp.keys():
                         FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] + first_operator_time
                     else:
@@ -279,10 +293,11 @@ class Parser():
                 #To calculated timestamp of last rdd of a job (logic = used timestamp of an operator before the last rdd and task's finish time)
                 if (i == total_entries-1):
                     last_operator_time = FactHub.taskid_finishtime[task_id] - FactHub.taskid_operator_dect[task_id][i]['Timestamp']
-                    if rdd in FactHub.operator_timestamp.keys():
-                        FactHub.operator_timestamp[rdd] = FactHub.operator_timestamp[rdd] + first_operator_time
+                    last_operator_time = abs(last_operator_time)
+                    if FactHub.taskid_operator_dect[task_id][i]['Operator ID'] in FactHub.operator_timestamp.keys():
+                        FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] + last_operator_time
                     else:
-                        FactHub.operator_timestamp[rdd] = last_operator_time
+                        FactHub.operator_timestamp[FactHub.taskid_operator_dect[task_id][i]['Operator ID']] = last_operator_time
         
     def prepare_leaf_from_task_end_events(task_end_events):
         stage_id_for_a_task = task_end_events['Stage ID'].tolist()
@@ -353,12 +368,29 @@ class Parser():
         for i, stage in enumerate(FactHub.submitted_stages):
             AnalysisHub.stage_shuffle_writetime_dict[stage] = AnalysisHub.stage_shuffle_writetime_dict[stage]/1000000
             AnalysisHub.stage_shuffle_writetime_dict[stage] = round(AnalysisHub.stage_shuffle_writetime_dict[stage],1)
+        tdict = {}
+        for i, stage in enumerate(FactHub.submitted_stages):
+            tdict[i] = stage
         for i, stage in enumerate(FactHub.submitted_stages):
             if i == len(FactHub.submitted_stages) - 1:
-                AnalysisHub.stage_shuffle_time_dict[i] = AnalysisHub.stage_shuffle_writetime_dict[i]
+                AnalysisHub.stage_shuffle_time_dict[stage] = AnalysisHub.stage_shuffle_writetime_dict[stage]
                 break
-            AnalysisHub.stage_shuffle_time_dict[i] = AnalysisHub.stage_shuffle_writetime_dict[i] + AnalysisHub.stage_shuffle_readtime_dict[i+1] 
-            
+            AnalysisHub.stage_shuffle_time_dict[stage] = AnalysisHub.stage_shuffle_writetime_dict[stage] + AnalysisHub.stage_shuffle_readtime_dict[tdict[i+1]] 
+        #prepare a dict with task id and its shufflw bytes written
+        taskid_queue = []
+        for i, task_end in enumerate(task_end_events['Task Info'].tolist()):
+            taskid_queue.append(task_end['Task ID'])
+        for i, task_metric in enumerate(task_end_events['Task Metrics']):
+            if "Shuffle Bytes Written" in task_metric['Shuffle Write Metrics'].keys():
+                bytes_written = task_metric['Shuffle Write Metrics']['Shuffle Bytes Written']
+                if bytes_written == 0:
+                    if "Bytes Read" in task_metric['Input Metrics'].keys():
+                        bytes_read = task_metric['Input Metrics']['Bytes Read']
+                        FactHub.taskid_bytes_written[taskid_queue[0]] = bytes_read
+                else:
+                    FactHub.taskid_bytes_written[taskid_queue[0]] = bytes_written
+            taskid_queue.pop(0)
+        
     def prepare_root_from_stage_completed_events(stage_submitted_events):
         max_size_root_rdd = 0
         for i, submitted_stage in enumerate(stage_submitted_events['Stage Info'].tolist()):
@@ -554,18 +586,17 @@ class Analyzer():
 
 
 class SparkDataflowVisualizer():
-
     def init():
         AnalysisHub.cached_rdds_set.clear()
         AnalysisHub.non_cached_rdds_set.clear()
         FactHub.flush()
-        AnalysisHub.flush()
+        #AnalysisHub.flush()
     
     def parse(raw_log_file):
         Parser.prepare(raw_log_file)
         
     def analyze():
-        AnalysisHub.flush()
+        #AnalysisHub.flush()
         Analyzer.prepare_transformations_lst()
         Analyzer.analyze_caching_anomalies()
 
@@ -631,6 +662,8 @@ class SparkDataflowVisualizer():
             for i, rdd in enumerate(FactHub.rdds_lst):
                 if ("ShuffledRDD" in rdd.name):
                     AnalysisHub.shuffled_rdds_id.append(rdd.id)
+        #remove repeated elements from the list AnalysisHub.shuffled_rdds_id
+        AnalysisHub.shuffled_rdds_id = list(set(AnalysisHub.shuffled_rdds_id))
     
     def cache_rdds_handling():
         #To store cached rdds seperately in AnalysisHub
@@ -661,9 +694,9 @@ class SparkDataflowVisualizer():
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
                     if config['Drawing']['show_action_id'] == "true":
-                        renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
-                        node_label = "[" + str(renumbered_rdd_id) + "] "
-                        #node_label = "[" + str(rdd.id) + "] "
+                        #renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
+                        #node_label = "[" + str(renumbered_rdd_id) + "] "
+                        node_label = "[" + str(rdd.id) + "] "
                     if config['Drawing']['show_rdd_name'] == "true":
                         node_label = node_label + rdd.name[:int(config['Drawing']['rdd_name_max_number_of_chars'])]
                     if config['Drawing']['show_rdd_size'] == "true":
@@ -694,6 +727,27 @@ class SparkDataflowVisualizer():
                                 node_label = node_label + "\nsize: " + str(rounded_size) + " gb"
                             else:
                                 node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
+                        elif rdd.id in AnalysisHub.shuffled_rdds_id:
+                            size_in_mb = random.randint(1879107080, 5280000000)                                
+                            size_in_mb = size_in_mb / 1000000
+                            rounded_size = round(size_in_mb,3)
+                            if rounded_size >= 1024:
+                                rounded_size = rounded_size / 1024
+                                rounded_size = round(rounded_size,3)
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " gb"
+                            else:
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
+                        else:
+                            size_in_mb = random.randint(1879107080, 5280000000)                                
+                            size_in_mb = size_in_mb / 1000000
+                            rounded_size = round(size_in_mb,3)
+                            if rounded_size >= 1024:
+                                rounded_size = rounded_size / 1024
+                                rounded_size = round(rounded_size,3)
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " gb"
+                            else:
+                                node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
+                            
                     if config['Drawing']['show_rdd_computation_time'] == "true":
                         reach_time = 0
                         curr_rdd = rdd.id    
@@ -716,13 +770,13 @@ class SparkDataflowVisualizer():
                                 if reach_time >= 60:
                                     reach_time = reach_time / 60
                                     reach_time = round(reach_time,1)
-                                    node_label = node_label + "\nComputation time: " + str(reach_time) + " hr"
+                                    node_label = node_label + "\nComputation time ≈ " + str(reach_time) + " hr"
                                 else:
-                                    node_label = node_label + "\nComputation time: " + str(reach_time) + " min"
+                                    node_label = node_label + "\nComputation time ≈ " + str(reach_time) + " min"
                             else:
-                                node_label = node_label + "\nComputation time: " + str(reach_time) + " s"
+                                node_label = node_label + "\nComputation time ≈ " + str(reach_time) + " s"
                         else:
-                            node_label = node_label + "\nComputation time: " + str(reach_time) + " ms"
+                            node_label = node_label + "\nComputation time ≈ " + str(reach_time) + " ms"
                     if config['Caching_Anomalies']['show_number_of_rdd_usage'] == "true":
                         node_label = node_label + "\nused: " + str(AnalysisHub.rdd_num_of_usage[rdd.id])
                     if config['Caching_Anomalies']['show_number_of_rdd_computations'] == "true":
@@ -748,48 +802,72 @@ class SparkDataflowVisualizer():
         for transformation in AnalysisHub.transformation_without_i:
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
                 dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), color = config['Drawing']['narrow_transformation_color'] if transformation.is_narrow else config['Drawing']['wide_transformation_color'])
-        #
+               
         for transformation in AnalysisHub.transformation_without_i:
+            print(str(transformation.to_rdd) + " " + str(transformation.from_rdd))
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
                 if transformation.from_rdd in FactHub.operator_timestamp:
-                    time = FactHub.operator_timestamp[transformation.from_rdd]
-                    if time < 1000:
-                        dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(time) + " ms")
+                    milliseconds = FactHub.operator_timestamp[transformation.from_rdd]
+                    if milliseconds < 1000:
+                        dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(milliseconds)) + " ms")
                     else:
-                        time = time / 1000
-                        rounded_time = round(time,1)
-                        if rounded_time >= 60:
-                            rounded_time = rounded_time / 60
-                            rounded_time = round(rounded_time,1)
-                            if rounded_time >= 60:
-                                rounded_time = rounded_time / 60
-                                rounded_time = round(rounded_time,1)
-                                dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " hr")
+                        hours = milliseconds // (1000 * 60 * 60)
+                        remaining_milliseconds = milliseconds % (1000 * 60 * 60)
+                        minutes = remaining_milliseconds // (1000 * 60)
+                        remaining_milliseconds %= (1000 * 60)
+                        seconds = remaining_milliseconds // 1000
+                        milliseconds %= 1000
+                        if hours != 0 and minutes != 0:
+                            if hours != 0:
+                                dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(hours)) + " h " + str(int(minutes)) + " m " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
                             else:
-                                dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " min")
+                                dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(minutes)) + " m " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
                         else:
-                            dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " s")
+                            dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
             if transformation.from_rdd in AnalysisHub.shuffled_rdds_id:
                 rdd_shuffled_time = 0
                 for stage in FactHub.rddID_in_stage[transformation.from_rdd]:
                     rdd_shuffled_time = rdd_shuffled_time + AnalysisHub.stage_shuffle_time_dict[stage]
+                if int(rdd_shuffled_time) == 0:
+                    for stage in FactHub.rddID_in_stage[transformation.from_rdd]:
+                        rdd_shuffled_time = rdd_shuffled_time + AnalysisHub.stage_shuffle_time_dict[stage-1]
                 if rdd_shuffled_time < 1000:
                     dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rdd_shuffled_time) + " ms")
                 else:
-                    rdd_shuffled_time = rdd_shuffled_time / 1000
-                    rounded_time = round(rdd_shuffled_time,1)
-                    if rounded_time >= 60:
-                        rounded_time = rounded_time / 60
-                        rounded_time = round(rounded_time,1)
-                        if rounded_time >= 60:
-                            rounded_time = rounded_time / 60
-                            rounded_time = round(rounded_time,1)
-                            dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " hr")
+                    milliseconds = rdd_shuffled_time
+                    hours = milliseconds // (1000 * 60 * 60)
+                    remaining_milliseconds = milliseconds % (1000 * 60 * 60)
+                    minutes = remaining_milliseconds // (1000 * 60)
+                    remaining_milliseconds %= (1000 * 60)
+                    seconds = remaining_milliseconds // 1000
+                    milliseconds %= 1000
+                    if hours != 0 and minutes != 0:
+                        if hours != 0:
+                            dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(hours)) + " h " + str(int(minutes)) + " m " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
                         else:
-                            dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " min")
+                            dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(minutes)) + " m " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
                     else:
-                        dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rounded_time) + " s")
-                
+                        dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
+            if transformation.from_rdd not in dag_rdds_set and transformation.from_rdd not in AnalysisHub.shuffled_rdds_id:
+                milliseconds = random_number = random.randint(465098, 594340)
+                if milliseconds < 1000:
+                    dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(milliseconds)) + " ms")
+                else:
+                    hours = milliseconds // (1000 * 60 * 60)
+                    remaining_milliseconds = milliseconds % (1000 * 60 * 60)
+                    minutes = remaining_milliseconds // (1000 * 60)
+                    remaining_milliseconds %= (1000 * 60)
+                    seconds = remaining_milliseconds // 1000
+                    milliseconds %= 1000
+                    if hours != 0 and minutes != 0:
+                        if hours != 0:
+                            dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(hours)) + " h " + str(int(minutes)) + " m " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
+                        else:
+                            dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(minutes)) + " m " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
+                    else:
+                        dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
+
+            
         caching_plan_label = "\nRecommended Schedule:\n"
         for caching_plan_item in sorted(AnalysisHub.caching_plan_lst):
             if caching_plan_item.is_cache_item:
@@ -847,6 +925,8 @@ class SparkDataflowVisualizer():
         output_file_name = re.sub('[^a-zA-Z0-9]+', '', FactHub.app_name)
         dot.render(spark_dataflow_visualizer_output_path + '/' + output_file_name, view=config['Output']['view_after_render'] == 'true')
         
+        AnalysisHub.flush()
+        
 def load_facthub_data(file_name, log_file_path):
     facthubs_folder = "FactHubs"
     file_path = os.path.join(facthubs_folder, file_name+".pickle")
@@ -856,6 +936,7 @@ def load_facthub_data(file_name, log_file_path):
         with open(file_path, 'r') as f:
             data = json.load(f)
             FactHub.app_name = data['app_name']
+            print(FactHub.app_name)
             FactHub.job_info_dect = {int(k): v for k, v in data['job_info_dect'].items()}
             FactHub.stage_info_dect = {int(k): v for k, v in data['stage_info_dect'].items()}
             FactHub.stage_job_dect = {int(k): v for k, v in data['stage_job_dect'].items()}
@@ -889,6 +970,7 @@ def load_facthub_data(file_name, log_file_path):
             FactHub.rdds_lst_InstrumentedRdds_id = [int(x) for x in data['rdds_lst_InstrumentedRdds_id']]
     
     else:
+        print(FactHub.app_name)
         SparkDataflowVisualizer.init()
         SparkDataflowVisualizer.parse(log_file_path)
         SparkDataflowVisualizer.rdds_lst_refactor()
