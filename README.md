@@ -1,5 +1,5 @@
 # SparkCAD
-SparkCAD (Spark Caching Anomalies Detector): Logical plan visualization and caching anomalies detection tool for Apache Spark applications.
+SparkCAD+ (Spark Caching Anomalies Detector Plus): Logical plan visualization and size and transformaton time display of every dataset for Apache Spark applications.
 
 * Current version: 1.0
 * Contents:
@@ -10,7 +10,7 @@ SparkCAD (Spark Caching Anomalies Detector): Logical plan visualization and cach
 ---
 ### OVERVIEW ###
 
-SparkCAD is an interactive decision support tool that visualizes the logical plan of Spark applications and detects caching anomalies. 
+SparkCAD is an interactive decision support tool that visualizes the logical plan of Spark applications and display dataset's size and transformation time. 
 It parses the execution logs of Spark (thse same ones that Spark's History Server parses without additional metadata).
 
 
@@ -20,6 +20,4 @@ It parses the execution logs of Spark (thse same ones that Spark's History Serve
 
 ### Organization ###
 
-Samples of 130 execution logs could be found in "logs" folder.
-The produced logical plans are stored by default in "Spark-DAGs".
 The default configuration is stored in "config.ini". The user can change it or overwrite the default configuration values during using the notebook.
