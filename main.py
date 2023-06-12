@@ -673,6 +673,10 @@ class SparkDataflowVisualizer():
                     FactHub.shuffled_rdds_id.append(rdd.id)
         #remove repeated elements from the list FactHub.shuffled_rdds_id
         FactHub.shuffled_rdds_id = list(set(FactHub.shuffled_rdds_id))
+        print("AnalysisHub.cached_rdds_set")
+        print(AnalysisHub.cached_rdds_set)
+        print("AnalysisHub.non_cached_rdds_set")
+        print(AnalysisHub.non_cached_rdds_set)
     
     def cache_rdds_handling():
         #To store cached rdds seperately in AnalysisHub
@@ -703,9 +707,9 @@ class SparkDataflowVisualizer():
                     dag_rdds_set.add(rdd.id)
                     node_label = "\n"
                     if config['Drawing']['show_action_id'] == "true":
-                        #renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
-                        #node_label = "[" + str(renumbered_rdd_id) + "] "
-                        node_label = "[" + str(rdd.id) + "] "
+                        renumbered_rdd_id = FactHub.rdds_lst_index_dict[rdd.id]
+                        node_label = "[" + str(renumbered_rdd_id) + "] "
+                        #node_label = "[" + str(rdd.id) + "] "
                     if config['Drawing']['show_rdd_name'] == "true":
                         node_label = node_label + rdd.name[:int(config['Drawing']['rdd_name_max_number_of_chars'])]
                     if config['Drawing']['show_rdd_size'] == "true":
@@ -988,7 +992,11 @@ def load_facthub_data(file_name, log_file_path):
             FactHub.rdds_lst_refactored = [Rdd.from_json(rdd) for rdd in data['rdds_lst_refactored']]
             FactHub.rdds_lst_InstrumentedRdds = [Rdd.from_json(rdd) for rdd in data['rdds_lst_InstrumentedRdds']]
             FactHub.rdds_lst_InstrumentedRdds_id = [int(x) for x in data['rdds_lst_InstrumentedRdds_id']]
-    
+            FactHub.stage_shuffle_writetime_dict = {int(k): v for k, v in data['stage_shuffle_writetime_dict'].items()}
+            FactHub.stage_shuffle_readtime_dict = {int(k): v for k, v in data['stage_shuffle_readtime_dict'].items()}
+            FactHub.stage_shuffle_time_dict = {int(k): v for k, v in data['stage_shuffle_time_dict'].items()}
+            FactHub.shuffled_rdds_id = [int(x) for x in data['shuffled_rdds_id']]
+            
     else:
         print(FactHub.app_name)
         SparkDataflowVisualizer.init()
@@ -1031,6 +1039,10 @@ def load_facthub_data(file_name, log_file_path):
         "rdds_lst_refactored": [rdd.to_json() for rdd in FactHub.rdds_lst_refactored],
         "rdds_lst_InstrumentedRdds": [rdd.to_json() for rdd in FactHub.rdds_lst_InstrumentedRdds],
         "rdds_lst_InstrumentedRdds_id": [str(rdd) for rdd in FactHub.rdds_lst_InstrumentedRdds_id],
+        "stage_shuffle_writetime_dict": FactHub.stage_shuffle_writetime_dict,
+        "stage_shuffle_readtime_dict": FactHub.stage_shuffle_readtime_dict,
+        "stage_shuffle_time_dict": FactHub.stage_shuffle_time_dict,
+        "shuffled_rdds_id": [str(rdd) for rdd in FactHub.shuffled_rdds_id]
         }
         with open(file_path, 'w') as f:
             json.dump(data, f)
@@ -1054,6 +1066,10 @@ def cache(rdd_id):
     key = list(FactHub.rdds_lst_index_dict.keys())[list(FactHub.rdds_lst_index_dict.values()).index(rdd_id)]
     AnalysisHub.cached_rdds_set.add(key+1)
     AnalysisHub.non_cached_rdds_set.discard(key+1)
+    print("AnalysisHub.cached_rdds_set")
+    print(AnalysisHub.cached_rdds_set)
+    print("AnalysisHub.non_cached_rdds_set")
+    print(AnalysisHub.non_cached_rdds_set)
     draw_DAG()
     
 def dont_cache(rdd_id):
