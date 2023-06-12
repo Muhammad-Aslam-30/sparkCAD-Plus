@@ -155,6 +155,11 @@ class FactHub():
     rdds_lst_InstrumentedRdds = []
     rdds_lst_InstrumentedRdds_id = []
     
+    stage_shuffle_writetime_dict = {}
+    stage_shuffle_readtime_dict = {}
+    stage_shuffle_time_dict = {}
+    shuffled_rdds_id = []
+    
 
     def flush():
         FactHub.app_name = ""
@@ -193,6 +198,10 @@ class FactHub():
         FactHub.rdds_lst_refactored = []
         FactHub.rdds_lst_InstrumentedRdds = []
         FactHub.rdds_lst_InstrumentedRdds_id = []
+        FactHub.stage_shuffle_writetime_dict = {}
+        FactHub.stage_shuffle_readtime_dict = {}
+        FactHub.stage_shuffle_time_dict = {}
+        FactHub.shuffled_rdds_id = []
         
 class AnalysisHub():
     
@@ -214,10 +223,10 @@ class AnalysisHub():
     recommended_schedule_unpersist_after = {}
     transformation_without_i = []
     transformation_from_to = {}
-    stage_shuffle_writetime_dict = {}
-    stage_shuffle_readtime_dict = {}
-    stage_shuffle_time_dict = {}
-    shuffled_rdds_id = []
+    #stage_shuffle_writetime_dict = {}
+    #stage_shuffle_readtime_dict = {}
+    #stage_shuffle_time_dict = {}
+    #shuffled_rdds_id = []
 
     def flush():
         AnalysisHub.transformations_set.clear()
@@ -238,10 +247,10 @@ class AnalysisHub():
         AnalysisHub.recommended_schedule_unpersist_after = {}
         AnalysisHub.transformation_without_i = []
         AnalysisHub.transformation_from_to = {}
-        AnalysisHub.stage_shuffle_writetime_dict = {}
-        AnalysisHub.stage_shuffle_readtime_dict = {}
-        AnalysisHub.stage_shuffle_time_dict = {}
-        AnalysisHub.shuffled_rdds_id = []
+        #AnalysisHub.stage_shuffle_writetime_dict = {}
+        #AnalysisHub.stage_shuffle_readtime_dict = {}
+        #AnalysisHub.stage_shuffle_time_dict = {}
+        #AnalysisHub.shuffled_rdds_id = []
         
 class Parser():    
     
@@ -339,15 +348,15 @@ class Parser():
                 shuffle_write_time = task_metrics['Shuffle Write Metrics']['Shuffle Write Time']
                 queue.append(shuffle_write_time)
         for i, stage in enumerate(stage_id_for_a_task):
-            if int(stage) not in AnalysisHub.stage_shuffle_writetime_dict.keys():
+            if int(stage) not in FactHub.stage_shuffle_writetime_dict.keys():
                 #calculated_with_launchtime = FactHub.taskid_launchtime[i] - queue[0]
-                #AnalysisHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime
-                AnalysisHub.stage_shuffle_writetime_dict[int(stage)] = queue[0]
+                #FactHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime
+                FactHub.stage_shuffle_writetime_dict[int(stage)] = queue[0]
                 queue.pop(0)
             else:
                 #calculated_with_launchtime = FactHub.taskid_launchtime[i] - queue[0]
-                #AnalysisHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime + AnalysisHub.stage_shuffle_time_dict[int(stage)]
-                AnalysisHub.stage_shuffle_writetime_dict[int(stage)] = queue[0] + AnalysisHub.stage_shuffle_writetime_dict[int(stage)]
+                #FactHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime + FactHub.stage_shuffle_time_dict[int(stage)]
+                FactHub.stage_shuffle_writetime_dict[int(stage)] = queue[0] + FactHub.stage_shuffle_writetime_dict[int(stage)]
                 queue.pop(0)
         queue1 = []
         for i, task_metrics in enumerate(task_end_events['Task Metrics']):
@@ -355,27 +364,27 @@ class Parser():
                 shuffle_read_time = task_metrics['Shuffle Read Metrics']['Fetch Wait Time']
                 queue1.append(shuffle_read_time)
         for i, stage in enumerate(stage_id_for_a_task):
-            if int(stage) not in AnalysisHub.stage_shuffle_readtime_dict.keys():
+            if int(stage) not in FactHub.stage_shuffle_readtime_dict.keys():
                 #calculated_with_launchtime = FactHub.taskid_launchtime[i] - queue[0]
-                #AnalysisHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime
-                AnalysisHub.stage_shuffle_readtime_dict[int(stage)] = queue1[0]
+                #FactHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime
+                FactHub.stage_shuffle_readtime_dict[int(stage)] = queue1[0]
                 queue1.pop(0)
             else:
                 #calculated_with_launchtime = FactHub.taskid_launchtime[i] - queue[0]
-                #AnalysisHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime + AnalysisHub.stage_shuffle_time_dict[int(stage)]
-                AnalysisHub.stage_shuffle_readtime_dict[int(stage)] = queue1[0] + AnalysisHub.stage_shuffle_readtime_dict[int(stage)]
+                #FactHub.stage_shuffle_time_dict[int(stage)] = calculated_with_launchtime + FactHub.stage_shuffle_time_dict[int(stage)]
+                FactHub.stage_shuffle_readtime_dict[int(stage)] = queue1[0] + FactHub.stage_shuffle_readtime_dict[int(stage)]
                 queue1.pop(0)
         for i, stage in enumerate(FactHub.submitted_stages):
-            AnalysisHub.stage_shuffle_writetime_dict[stage] = AnalysisHub.stage_shuffle_writetime_dict[stage]/1000000
-            AnalysisHub.stage_shuffle_writetime_dict[stage] = round(AnalysisHub.stage_shuffle_writetime_dict[stage],1)
+            FactHub.stage_shuffle_writetime_dict[stage] = FactHub.stage_shuffle_writetime_dict[stage]/1000000
+            FactHub.stage_shuffle_writetime_dict[stage] = round(FactHub.stage_shuffle_writetime_dict[stage],1)
         tdict = {}
         for i, stage in enumerate(FactHub.submitted_stages):
             tdict[i] = stage
         for i, stage in enumerate(FactHub.submitted_stages):
             if i == len(FactHub.submitted_stages) - 1:
-                AnalysisHub.stage_shuffle_time_dict[stage] = AnalysisHub.stage_shuffle_writetime_dict[stage]
+                FactHub.stage_shuffle_time_dict[stage] = FactHub.stage_shuffle_writetime_dict[stage]
                 break
-            AnalysisHub.stage_shuffle_time_dict[stage] = AnalysisHub.stage_shuffle_writetime_dict[stage] + AnalysisHub.stage_shuffle_readtime_dict[tdict[i+1]] 
+            FactHub.stage_shuffle_time_dict[stage] = FactHub.stage_shuffle_writetime_dict[stage] + FactHub.stage_shuffle_readtime_dict[tdict[i+1]] 
         #prepare a dict with task id and its shufflw bytes written
         taskid_queue = []
         for i, task_end in enumerate(task_end_events['Task Info'].tolist()):
@@ -658,12 +667,12 @@ class SparkDataflowVisualizer():
         for transformation in AnalysisHub.transformation_without_i:
             AnalysisHub.transformation_from_to[transformation.from_rdd] = transformation.to_rdd
         
-        if not AnalysisHub.shuffled_rdds_id:
+        if not FactHub.shuffled_rdds_id:
             for i, rdd in enumerate(FactHub.rdds_lst):
                 if ("ShuffledRDD" in rdd.name):
-                    AnalysisHub.shuffled_rdds_id.append(rdd.id)
-        #remove repeated elements from the list AnalysisHub.shuffled_rdds_id
-        AnalysisHub.shuffled_rdds_id = list(set(AnalysisHub.shuffled_rdds_id))
+                    FactHub.shuffled_rdds_id.append(rdd.id)
+        #remove repeated elements from the list FactHub.shuffled_rdds_id
+        FactHub.shuffled_rdds_id = list(set(FactHub.shuffled_rdds_id))
     
     def cache_rdds_handling():
         #To store cached rdds seperately in AnalysisHub
@@ -727,7 +736,7 @@ class SparkDataflowVisualizer():
                                 node_label = node_label + "\nsize: " + str(rounded_size) + " gb"
                             else:
                                 node_label = node_label + "\nsize: " + str(rounded_size) + " mb"
-                        elif rdd.id in AnalysisHub.shuffled_rdds_id:
+                        elif rdd.id in FactHub.shuffled_rdds_id:
                             size_in_mb = random.randint(1879107080, 5280000000)                                
                             size_in_mb = size_in_mb / 1000000
                             rounded_size = round(size_in_mb,3)
@@ -803,12 +812,14 @@ class SparkDataflowVisualizer():
             if transformation.to_rdd in dag_rdds_set and transformation.from_rdd in dag_rdds_set:
                 dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), color = config['Drawing']['narrow_transformation_color'] if transformation.is_narrow else config['Drawing']['wide_transformation_color'])
         
-        print("AnalysisHub.stage_shuffle_time_dict")
-        print(AnalysisHub.stage_shuffle_time_dict)
+        print("FactHub.stage_shuffle_time_dict")
+        print(FactHub.stage_shuffle_time_dict)
         print("dag_rdds_set")
         print(dag_rdds_set)
-        print("AnalysisHub.shuffled_rdds_id")
-        print(AnalysisHub.shuffled_rdds_id)
+        print("FactHub.shuffled_rdds_id")
+        print(FactHub.shuffled_rdds_id)
+        print("FactHub.stage_shuffle_time_dict")
+        print(FactHub.stage_shuffle_time_dict)
         print("FactHub.operator_timestamp")
         print(FactHub.operator_timestamp)
 
@@ -833,13 +844,13 @@ class SparkDataflowVisualizer():
                                 dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(minutes)) + " m " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
                         else:
                             dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
-            if transformation.from_rdd in AnalysisHub.shuffled_rdds_id:
+            if transformation.from_rdd in FactHub.shuffled_rdds_id:
                 rdd_shuffled_time = 0
                 for stage in FactHub.rddID_in_stage[transformation.from_rdd]:
-                    rdd_shuffled_time = rdd_shuffled_time + AnalysisHub.stage_shuffle_time_dict[stage]
+                    rdd_shuffled_time = rdd_shuffled_time + FactHub.stage_shuffle_time_dict[stage]
                 if int(rdd_shuffled_time) == 0:
                     for stage in FactHub.rddID_in_stage[transformation.from_rdd]:
-                        rdd_shuffled_time = rdd_shuffled_time + AnalysisHub.stage_shuffle_time_dict[stage-1]
+                        rdd_shuffled_time = rdd_shuffled_time + FactHub.stage_shuffle_time_dict[stage-1]
                 if rdd_shuffled_time < 1000:
                     dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(rdd_shuffled_time) + " ms")
                 else:
@@ -857,7 +868,7 @@ class SparkDataflowVisualizer():
                             dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(minutes)) + " m " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
                     else:
                         dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(seconds)) + " s " + str(int(milliseconds)) + " ms")
-            if transformation.from_rdd not in FactHub.operator_timestamp and transformation.from_rdd not in AnalysisHub.shuffled_rdds_id:
+            if transformation.from_rdd not in FactHub.operator_timestamp and transformation.from_rdd not in FactHub.shuffled_rdds_id:
                 milliseconds = random_number = random.randint(465098, 594340)
                 if milliseconds < 1000:
                     dot.edge(str(transformation.to_rdd), str(transformation.from_rdd), label = "  " + str(int(milliseconds)) + " ms")
